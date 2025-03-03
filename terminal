@@ -1,0 +1,7 @@
+mkdir realtime-chat-app
+cd realtime-chat-app
+npm init -y
+npm install express socket.io @supabase/supabase-js bull dotenv cors helmet
+npm install -D nodemon
+mkdir -p src/config src/controllers src/routes src/services src/middlewares src/utils public
+touch .env .gitignore 

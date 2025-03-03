@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Paneli</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- Alpine.js'i doğrudan CDN'den yükle -->
+  <script src="https://unpkg.com/alpinejs@3.10.3/dist/cdn.min.js" defer></script>
+  <!-- Supabase kütüphanesini ekleyin -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Favicon -->
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-text: #333333;
+      --color-primary: #4f46e5;
+      --color-secondary: #818cf8;
+      --color-accent: #c7d2fe;
+      --color-card: #f3f4f6;
+    }
+    
+    .dark {
+      --color-bg: #1f2937;
+      --color-text: #f3f4f6;
+      --color-primary: #6366f1;
+      --color-secondary: #818cf8;
+      --color-accent: #4f46e5;
+      --color-card: #374151;
+    }
+    
+    body {
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      transition: background-color 0.3s, color 0.3s;
+    }
+  </style>
+</head>
+<body x-data="adminApp()" :class="darkMode ? 'dark' : ''">
+  <!-- Beğenilmedi mesajını kaldır -->
+  <div class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white p-4">
+      <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Admin Paneli</h1>
+        <div class="flex items-center space-x-4">
+          <button @click="toggleTheme()" class="p-2 rounded-full hover:bg-indigo-700">
+            <svg x-show="!darkMode" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+            <svg x-show="darkMode" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </button>
+          <a href="/" class="bg-white text-indigo-600 px-3 py-1 rounded-md text-sm hover:bg-indigo-100">
+            Ana Sayfa
+          </a>
+          <button @click="logout()" class="bg-indigo-700 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-800">
+            Çıkış
+          </button>
+        </div>
+      </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto p-4">
+      <!-- Sekme Başlıkları -->
+      <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
+        <nav class="-mb-px flex space-x-8">
+          <button @click="activeTab = 'dashboard'" :class="activeTab === 'dashboard' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">
+            Dashboard
+          </button>
+          <button @click="activeTab = 'users'" :class="activeTab === 'users' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">
+            Kullanıcılar
+          </button>
+          <button @click="activeTab = 'logs'" :class="activeTab === 'logs' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">
+            Aktivite Günlüğü
+          </button>
+          <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'" class="py-4 px-1 border-b-2 font-medium text-sm">
+            Ayarlar
+          </button>
+        </nav>
+      </div>
+      
+      <!-- Sekme İçerikleri -->
+      <!-- Kullanıcılar Sekmesi -->
+      <div x-show="activeTab === 'users'" class="space-y-6 p-6">
+        <!-- Arama ve Filtreleme -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+            <div class="flex-1 md:mr-4">
+              <div class="relative">
+                <input 
+                  type="text" 
+                  x-model="searchTerm" 
+                  @keyup.enter="fetchUsers()" 
+                  placeholder="Kullanıcı ara..." 
+                  class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white pl-10"
+                >
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div class="flex space-x-2">
+              <select 
+                x-model="filterStatus" 
+                @change="fetchUsers()" 
+                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+              >
+                <option value="all">Tüm Kullanıcılar</option>
+                <option value="active">Aktif Kullanıcılar</option>
+                <option value="banned">Banlı Kullanıcılar</option>
+              </select>
+              <button 
+                @click="fetchUsers()" 
+                class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Ara
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Kullanıcı Listesi -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Kullanıcı</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Kayıt Tarihi</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Durum</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Rol</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <template x-for="user in users" :key="user.id">
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                          <img 
+                            :src="getAvatarUrl(user.username, user.email)" 
+                            :alt="user.username || 'Kullanıcı'" 
+                            class="h-8 w-8 rounded-full"
+                            onerror="this.src='https://ui-avatars.com/api/?name=User&background=random&color=fff'"
+                          />
+                        </div>
+                        <div class="ml-4">
+                          <div class="text-sm font-medium text-gray-900 dark:text-white" x-text="user.username"></div>
+                          <div class="text-sm text-gray-500 dark:text-gray-400" x-text="user.email"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" x-text="formatDate(user.created_at)"></td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                        :class="user.banned ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'"
+                        x-text="user.banned ? 'Banlı' : 'Aktif'"></span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <select 
+                        :id="'role-' + user.id" 
+                        @change="changeUserRole(user.id, $event.target.value)" 
+                        class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs dark:bg-gray-700 dark:text-white"
+                      >
+                        <option value="user" :selected="user.role === 'user'">Kullanıcı</option>
+                        <option value="moderator" :selected="user.role === 'moderator'">Moderatör</option>
+                        <option value="admin" :selected="user.role === 'admin'">Admin</option>
+                      </select>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div class="flex justify-end space-x-2">
+                        <button 
+                          @click="showUserDetailsModal = true; selectedUser = user" 
+                          class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                        >
+                          Detaylar
+                        </button>
+                        <button 
+                          x-show="!user.banned" 
+                          @click="showBanModal = true; selectedUser = user" 
+                          class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          Banla
+                        </button>
+                        <button 
+                          x-show="user.banned" 
+                          @click="unbanUser(user.id)" 
+                          class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                        >
+                          Banı Kaldır
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Sayfalama -->
+          <div class="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 sm:px-6">
+            <div class="flex-1 flex justify-between sm:hidden">
+              <button 
+                @click="currentPage > 1 ? currentPage-- : null; fetchUsers()" 
+                :disabled="currentPage <= 1" 
+                :class="currentPage <= 1 ? 'opacity-50 cursor-not-allowed' : ''" 
+                class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+              >
+                Önceki
+              </button>
+              <button 
+                @click="hasMorePages ? currentPage++ : null; fetchUsers()" 
+                :disabled="!hasMorePages" 
+                :class="!hasMorePages ? 'opacity-50 cursor-not-allowed' : ''" 
+                class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+              >
+                Sonraki
+              </button>
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm text-gray-700 dark:text-gray-300">
+                  <span x-text="(currentPage - 1) * pageSize + 1"></span>
+                  -
+                  <span x-text="Math.min(currentPage * pageSize, totalUsers)"></span>
+                  /
+                  <span x-text="totalUsers"></span>
+                  sonuç gösteriliyor
+                </p>
+              </div>
+              <div>
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                  <button 
+                    @click="currentPage > 1 ? currentPage-- : null; fetchUsers()" 
+                    :disabled="currentPage <= 1" 
+                    :class="currentPage <= 1 ? 'opacity-50 cursor-not-allowed' : ''" 
+                    class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    <span class="sr-only">Önceki</span>
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  <button 
+                    @click="hasMorePages ? currentPage++ : null; fetchUsers()" 
+                    :disabled="!hasMorePages" 
+                    :class="!hasMorePages ? 'opacity-50 cursor-not-allowed' : ''" 
+                    class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    <span class="sr-only">Sonraki</span>
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Admin Yönetimi Sekmesi -->
+      <div x-show="activeTab === 'settings'" class="space-y-6">
+        <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg p-6">
+          <h3 class="text-lg font-medium mb-4">Admin Ekle</h3>
+          <div class="flex space-x-2">
+            <input 
+              type="email" 
+              x-model="newAdminEmail" 
+              placeholder="E-posta adresi" 
+              class="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+            >
+            <button 
+              @click="addAdmin()" 
+              class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+            >
+              Ekle
+            </button>
+          </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
+          <div class="p-6">
+            <h3 class="text-lg font-medium mb-4">Admin Listesi</h3>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">E-posta</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Eklenme Tarihi</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  <template x-for="admin in admins" :key="admin.id">
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white" x-text="admin.email"></td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300" x-text="formatDate(admin.created_at)"></td>
+                      <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button 
+                          @click="removeAdmin(admin.email)" 
+                          class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          Sil
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Dashboard Sekmesi -->
+      <div x-show="activeTab === 'dashboard'" class="space-y-6 p-6">
+        <!-- İstatistik Kartları -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <!-- Toplam Üye Sayısı -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-all duration-300 hover:shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Toplam Üye</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white" x-text="totalUsers"></p>
+              </div>
+              <div class="p-3 bg-indigo-100 dark:bg-indigo-900 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+            </div>
+            <div class="mt-4">
+              <p class="text-sm text-gray-500 dark:text-gray-400">Toplam kayıtlı kullanıcı sayısı</p>
+            </div>
+          </div>
+          
+          <!-- Aktif Üye Sayısı -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-all duration-300 hover:shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Aktif Üye</p>
+                <p class="text-3xl font-bold text-green-600 dark:text-green-400" x-text="activeUsers"></p>
+              </div>
+              <div class="p-3 bg-green-100 dark:bg-green-900 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+            <div class="mt-4">
+              <p class="text-sm text-gray-500 dark:text-gray-400">Son 24 saat içinde aktif olan kullanıcılar</p>
+            </div>
+          </div>
+          
+          <!-- Banlı Üye Sayısı -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-all duration-300 hover:shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Banlı Üye</p>
+                <p class="text-3xl font-bold text-red-600 dark:text-red-400" x-text="bannedUsers"></p>
+              </div>
+              <div class="p-3 bg-red-100 dark:bg-red-900 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+            </div>
+            <div class="mt-4">
+              <p class="text-sm text-gray-500 dark:text-gray-400">Şu anda yasaklı olan kullanıcılar</p>
+            </div>
+          </div>
+          
+          <!-- Bugünkü Görüşme Sayısı -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-all duration-300 hover:shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Bugünkü Görüşmeler</p>
+                <p class="text-3xl font-bold text-blue-600 dark:text-blue-400" x-text="todayCalls"></p>
+              </div>
+              <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            <div class="mt-4">
+              <p class="text-sm text-gray-500 dark:text-gray-400">Bugün gerçekleşen görüşme sayısı</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- En Aktif Kullanıcılar -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">En Aktif Kullanıcılar</h3>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Kullanıcı</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Toplam Süre</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Son Görüşme</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Görüşme Sayısı</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <template x-for="user in topActiveUsers" :key="user.id">
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                          <img 
+                            :src="getAvatarUrl(user.username, user.email)" 
+                            :alt="user.username || 'Kullanıcı'" 
+                            class="h-8 w-8 rounded-full"
+                            onerror="this.src='https://ui-avatars.com/api/?name=User&background=random&color=fff'"
+                          />
+                        </div>
+                        <div class="ml-4">
+                          <div class="text-sm font-medium text-gray-900 dark:text-white" x-text="user.username"></div>
+                          <div class="text-sm text-gray-500 dark:text-gray-400" x-text="user.email"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" x-text="formatDuration(user.totalDuration)"></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" x-text="formatDate(user.lastCall)"></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" x-text="user.callCount"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <!-- Son Aktiviteler -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Son Aktiviteler</h3>
+          <div class="space-y-4">
+            <template x-for="(log, index) in recentActivities.slice(0, 5)" :key="index">
+              <div class="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
+                <div class="flex-shrink-0">
+                  <div class="w-10 h-10 rounded-full flex items-center justify-center" :class="{
+                    'bg-green-100 dark:bg-green-900': log.action.includes('login'),
+                    'bg-blue-100 dark:bg-blue-900': log.action.includes('call'),
+                    'bg-red-100 dark:bg-red-900': log.action.includes('ban'),
+                    'bg-yellow-100 dark:bg-yellow-900': log.action.includes('admin'),
+                    'bg-purple-100 dark:bg-purple-900': log.action.includes('profile')
+                  }">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" :class="{
+                      'text-green-600 dark:text-green-400': log.action.includes('login'),
+                      'text-blue-600 dark:text-blue-400': log.action.includes('call'),
+                      'text-red-600 dark:text-red-400': log.action.includes('ban'),
+                      'text-yellow-600 dark:text-yellow-400': log.action.includes('admin'),
+                      'text-purple-600 dark:text-purple-400': log.action.includes('profile')
+                    }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                        :d="log.action.includes('login') ? 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1' : 
+                            log.action.includes('call') ? 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z' : 
+                            log.action.includes('ban') ? 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' : 
+                            log.action.includes('admin') ? 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' : 
+                            'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-3 flex-1">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="log.details"></p>
+                  <div class="flex justify-between mt-1">
+                    <p class="text-xs text-gray-500 dark:text-gray-400" x-text="log.user_email"></p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400" x-text="formatDate(log.created_at)"></p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <!-- Ban Modal -->
+  <div x-show="showBanModal" class="fixed inset-0 z-10 overflow-y-auto" style="display: none;">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+        <div class="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
+      </div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+      <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div class="sm:flex sm:items-start">
+            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900 sm:mx-0 sm:h-10 sm:w-10">
+              <svg class="h-6 w-6 text-red-600 dark:text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+              <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">
+                Kullanıcıyı Banla
+              </h3>
+              <div class="mt-2">
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  <span x-text="selectedUser ? selectedUser.username : ''"></span> kullanıcısını banlamak istediğinize emin misiniz?
+                </p>
+                <div class="mt-4">
+                  <label for="banDuration" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ban Süresi</label>
+                  <select id="banDuration" x-model="banDuration" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white">
+                    <option value="1">1 Saat</option>
+                    <option value="24">24 Saat</option>
+                    <option value="168">1 Hafta</option>
+                    <option value="720">30 Gün</option>
+                    <option value="8760">1 Yıl</option>
+                    <option value="0">Süresiz</option>
+                  </select>
+                </div>
+                <div class="mt-4">
+                  <label for="banReason" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ban Nedeni</label>
+                  <textarea id="banReason" x-model="banReason" rows="3" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button 
+            @click="banUser()" 
+            type="button" 
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+          >
+            Banla
+          </button>
+          <button 
+            @click="showBanModal = false; selectedUser = null; banReason = ''; banDuration = '24';" 
+            type="button" 
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+          >
+            İptal
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Kullanıcı Detayları Modal -->
+  <div x-show="showUserDetailsModal" class="fixed inset-0 z-10 overflow-y-auto" style="display: none;">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+        <div class="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
+      </div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+      <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div class="sm:flex sm:items-start">
+            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 dark:bg-indigo-900 sm:mx-0 sm:h-10 sm:w-10">
+              <svg class="h-6 w-6 text-indigo-600 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+              <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">
+                Kullanıcı Detayları
+              </h3>
+              <div class="mt-2">
+                <div class="space-y-4">
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400">Kullanıcı Bilgileri</h4>
+                    <div class="mt-2 grid grid-cols-2 gap-4">
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Kullanıcı Adı</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="selectedUser ? selectedUser.username : ''"></p>
+                      </div>
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">E-posta</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="selectedUser ? selectedUser.email : ''"></p>
+                      </div>
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Kayıt Tarihi</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="selectedUser ? formatDate(selectedUser.created_at) : ''"></p>
+                      </div>
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Durum</p>
+                        <p class="text-sm font-medium" :class="selectedUser && selectedUser.banned ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" x-text="selectedUser && selectedUser.banned ? 'Banlı' : 'Aktif'"></p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400">Kullanıcı İstatistikleri</h4>
+                    <div class="mt-2 grid grid-cols-2 gap-4">
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Toplam Görüşme</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="userStats.callCount || 0"></p>
+                      </div>
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Toplam Süre</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="formatDuration(userStats.totalDuration || 0)"></p>
+                      </div>
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Son Görüşme</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="userStats.lastCall ? formatDate(userStats.lastCall) : 'Yok'"></p>
+                      </div>
+                      <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Ortalama Görüşme</p>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="userStats.callCount ? formatDuration(userStats.totalDuration / userStats.callCount) : '0 dk'"></p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400">Son Aktiviteler</h4>
+                    <div class="mt-2 space-y-2 max-h-40 overflow-y-auto">
+                      <template x-for="(log, index) in userLogs" :key="index">
+                        <div class="flex items-center justify-between p-2 rounded-md bg-gray-50 dark:bg-gray-700">
+                          <div>
+                            <p class="text-xs font-medium text-gray-900 dark:text-white" x-text="log.details"></p>
+                          </div>
+                          <div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400" x-text="formatDate(log.created_at)"></p>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button 
+            @click="showUserDetailsModal = false; selectedUser = null; userStats = {}; userLogs = [];" 
+            type="button" 
+            class="w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm"
+          >
+            Kapat
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Supabase istemcisini oluştur
+    const supabaseUrl = 'https://unrfzoyltrqoyumrbhjo.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucmZ6b3lsdHJxb3l1bXJiaGpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA5NDg5NDEsImV4cCI6MjA1NjUyNDk0MX0.4p18-Ohwnerg-qUpKr4f4TQWVWKBJtSdTdmDaoTJLDE';
+    const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+    
+    // Socket.io bağlantısı
+    const socket = io({
+      path: '/socket.io',
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      transports: ['websocket', 'polling']
+    });
+    
+    // Tarih formatı
+    function formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    
+    // Süre formatı
+    function formatDuration(seconds) {
+      if (!seconds) return '0 dk';
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      
+      if (hours > 0) {
+        return `${hours} sa ${minutes % 60} dk`;
+      }
+      return `${minutes} dk`;
+    }
+    
+    // Kullanıcı avatarı oluşturma fonksiyonu
+    function getAvatarUrl(username, email) {
+      return `https://ui-avatars.com/api/?name=${encodeURIComponent(username || email || 'User')}&background=random&color=fff`;
+    }
+
+    function adminApp() {
+      return {
+        // Durum değişkenleri
+        darkMode: localStorage.getItem('darkMode') === 'true',
+        user: null,
+        isAdmin: false,
+        activeTab: 'dashboard',
+        users: [],
+        filteredUsers: [],
+        totalUsers: 0,
+        activeUsers: 0,
+        bannedUsers: 0,
+        todayCalls: 0,
+        currentPage: 1,
+        pageSize: 10,
+        hasMorePages: false,
+        searchTerm: '',
+        filterStatus: 'all',
+        activityLogs: [],
+        showBanModal: false,
+        showUserDetailsModal: false,
+        selectedUser: null,
+        banDuration: '24',
+        banReason: '',
+        userStats: {},
+        userLogs: [],
+        admins: [],
+        newAdminEmail: '',
+        token: null,
+        topActiveUsers: [],
+        recentActivities: [],
+        
+        // Sayfa yüklendiğinde
+        async init() {
+          console.log('Admin paneli başlatılıyor...');
+          
+          try {
+            // Oturum kontrolü
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            
+            if (!session) {
+              console.error('Oturum bulunamadı');
+              window.location.href = '/';
+              return;
+            }
+            
+            this.token = session.access_token;
+            this.user = session.user;
+            
+            // Admin kontrolü
+            await this.checkAdmin();
+            
+            if (this.isAdmin) {
+              // Dashboard verilerini yükle
+              await this.loadDashboardData();
+              
+              // Kullanıcıları yükle
+              await this.loadUsers();
+              
+              // Aktivite günlüğünü yükle
+              await this.loadActivityLogs();
+              
+              // Adminleri yükle
+              await this.loadAdmins();
+            } else {
+              window.location.href = '/';
+            }
+          } catch (err) {
+            console.error('Admin paneli başlatma hatası:', err);
+          }
+        },
+        
+        // Tema değiştirme
+        toggleTheme() {
+          this.darkMode = !this.darkMode;
+          localStorage.setItem('darkMode', this.darkMode);
+        },
+        
+        // Çıkış yapma
+        async logout() {
+          try {
+            await supabaseClient.auth.signOut();
+            window.location.href = '/';
+          } catch (err) {
+            console.error('Çıkış hatası:', err);
+          }
+        },
+        
+        // Admin kontrolü
+        async checkAdmin() {
+          try {
+            const { data, error } = await supabaseClient
+              .from('admins')
+              .select('*')
+              .eq('user_id', this.user.id)
+              .single();
+            
+            if (error) {
+              console.error('Admin kontrolü hatası:', error);
+              this.isAdmin = false;
+              return;
+            }
+            
+            this.isAdmin = !!data;
+          } catch (err) {
+            console.error('Admin kontrolü hatası:', err);
+            this.isAdmin = false;
+          }
+        },
+        
+        // Dashboard verilerini yükle
+        async loadDashboardData() {
+          try {
+            // Toplam kullanıcı sayısı
+            const { count: totalUsers, error: totalError } = await supabaseClient
+              .from('profiles')
+              .select('*', { count: 'exact' });
+            
+            if (!totalError) {
+              this.totalUsers = totalUsers || 0;
+            }
+            
+            // Aktif kullanıcı sayısı - banned alanı yoksa tüm kullanıcıları aktif kabul et
+            this.activeUsers = this.totalUsers;
+            
+            // Bugünkü görüşme sayısı
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Aktivite günlüğü tablosu yoksa oluştur
+            try {
+              await supabaseClient.rpc('create_activity_logs_if_not_exists');
+            } catch (error) {
+              console.log('Aktivite günlüğü tablosu oluşturma hatası (normal olabilir):', error);
+            }
+            
+            // Son aktiviteleri getir
+            try {
+              const { data: recentActivities, error: recentError } = await supabaseClient
+                .from('user_activities')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(5);
+              
+              if (!recentError && recentActivities) {
+                this.recentActivities = recentActivities;
+              }
+            } catch (error) {
+              console.log('Son aktiviteleri getirme hatası:', error);
+            }
+            
+            // En aktif kullanıcıları getir
+            try {
+              const { data: topUsers, error: topError } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .order('last_active', { ascending: false })
+                .limit(5);
+              
+              if (!topError && topUsers) {
+                this.topActiveUsers = topUsers;
+              }
+            } catch (error) {
+              console.log('En aktif kullanıcıları getirme hatası:', error);
+            }
+          } catch (err) {
+            console.error('Dashboard verilerini yükleme hatası:', err);
+          }
+        },
+        
+        // Kullanıcıları yükle
+        async loadUsers() {
+          try {
+            console.log('Kullanıcılar getiriliyor...');
+            console.log(`Sayfa: ${this.currentPage} Limit: ${this.pageSize} Arama: ${this.searchTerm} Durum: ${this.filterStatus}`);
+            
+            // Kullanıcı sayısını al
+            const countQuery = supabaseClient
+              .from('profiles')
+              .select('*', { count: 'exact' });
+            
+            // Filtreleme
+            if (this.searchTerm) {
+              countQuery.or(`username.ilike.%${this.searchTerm}%,email.ilike.%${this.searchTerm}%`);
+            }
+            
+            // banned alanı varsa filtrele
+            try {
+              if (this.filterStatus === 'active') {
+                countQuery.eq('banned', false);
+              } else if (this.filterStatus === 'banned') {
+                countQuery.eq('banned', true);
+              }
+            } catch (error) {
+              console.log('Banned alanı filtreleme hatası (alan mevcut değil):', error);
+            }
+            
+            const { count, error: countError } = await countQuery;
+            
+            if (countError) {
+              console.error('Kullanıcı sayısı alma hatası:', countError);
+              return;
+            }
+            
+            this.totalUsers = count || 0;
+            console.log('Toplam kullanıcı sayısı:', this.totalUsers);
+            
+            // Kullanıcıları al
+            let query = supabaseClient
+              .from('profiles')
+              .select('*')
+              .range((this.currentPage - 1) * this.pageSize, this.currentPage * this.pageSize - 1)
+              .order('created_at', { ascending: false });
+            
+            // Filtreleme
+            if (this.searchTerm) {
+              query.or(`username.ilike.%${this.searchTerm}%,email.ilike.%${this.searchTerm}%`);
+            }
+            
+            // banned alanı varsa filtrele
+            try {
+              if (this.filterStatus === 'active') {
+                query.eq('banned', false);
+              } else if (this.filterStatus === 'banned') {
+                query.eq('banned', true);
+              }
+            } catch (error) {
+              console.log('Banned alanı filtreleme hatası (alan mevcut değil):', error);
+            }
+            
+            const { data: profiles, error } = await query;
+            
+            if (error) {
+              console.error('Kullanıcı profilleri alma hatası:', error);
+              return;
+            }
+            
+            console.log('Kullanıcı profilleri:', profiles ? profiles.length : 0);
+            
+            this.users = profiles || [];
+            this.filteredUsers = [...this.users];
+            console.log('Filtrelenmiş kullanıcılar:', this.filteredUsers.length);
+            
+            // Sayfalama kontrolü
+            this.hasMorePages = this.totalUsers > this.currentPage * this.pageSize;
+            
+          } catch (err) {
+            console.error('Kullanıcıları yükleme hatası:', err);
+          }
+        },
+        
+        // Aktivite günlüğünü yükle
+        async loadActivityLogs() {
+          try {
+            console.log('Aktivite günlüğü getiriliyor...');
+            
+            // Aktivite günlüğü tablosu yoksa oluştur
+            try {
+              await supabaseClient.rpc('create_activity_logs_if_not_exists');
+            } catch (error) {
+              console.log('Aktivite günlüğü tablosu oluşturma hatası (normal olabilir):', error);
+            }
+            
+            // Aktivite günlüğünü getir
+            try {
+              const { data, error } = await supabaseClient
+                .from('user_activities')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(50);
+              
+              if (error) {
+                console.error('Aktivite günlüğü getirme hatası:', error);
+                return;
+              }
+              
+              this.activityLogs = data || [];
+              console.log('Aktivite günlüğü kayıtları:', this.activityLogs.length);
+            } catch (error) {
+              console.log('Aktivite günlüğü getirme hatası:', error);
+              this.activityLogs = [];
+            }
+          } catch (err) {
+            console.error('Aktivite günlüğü getirme hatası:', err);
+          }
+        },
+        
+        // Adminleri yükle
+        async loadAdmins() {
+          try {
+            // Doğrudan adminleri getir, ilişkili sorgu kullanma
+            const { data, error } = await supabaseClient
+              .from('admins')
+              .select('*');
+            
+            if (error) {
+              console.error('Adminleri getirme hatası:', error);
+              return;
+            }
+            
+            // Admin kullanıcı bilgilerini ayrı bir sorguda al
+            const adminIds = data.map(admin => admin.user_id);
+            
+            if (adminIds.length > 0) {
+              const { data: profiles, error: profilesError } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .in('id', adminIds);
+              
+              if (profilesError) {
+                console.error('Admin profilleri getirme hatası:', profilesError);
+                return;
+              }
+              
+              this.admins = data.map(admin => {
+                const profile = profiles.find(p => p.id === admin.user_id) || {};
+                return {
+                  ...admin,
+                  username: profile.username || 'Anonim',
+                  email: profile.email || ''
+                };
+              });
+            } else {
+              this.admins = [];
+            }
+          } catch (err) {
+            console.error('Adminleri yükleme hatası:', err);
+            this.admins = [];
+          }
+        },
+        
+        // Kullanıcı detaylarını göster
+        async showUserDetails(user) {
+          this.selectedUser = user;
+          this.showUserDetailsModal = true;
+          
+          try {
+            // Kullanıcı istatistiklerini al
+            const { data: calls, error: callsError } = await supabaseClient
+              .from('calls')
+              .select('*')
+              .eq('user_id', user.id);
+            
+            if (callsError) {
+              console.error('Kullanıcı çağrıları getirme hatası:', callsError);
+              this.userStats = {
+                callCount: 0,
+                totalDuration: 0,
+                lastCall: null
+              };
+            } else {
+              const totalDuration = calls ? calls.reduce((sum, call) => sum + (call.duration || 0), 0) : 0;
+              const lastCall = calls && calls.length > 0 ? 
+                calls.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0].created_at : null;
+              
+              this.userStats = {
+                callCount: calls ? calls.length : 0,
+                totalDuration,
+                lastCall
+              };
+            }
+            
+            // Kullanıcı aktivite günlüğünü al
+            const { data: logs, error: logsError } = await supabaseClient
+              .from('activity_logs')
+              .select('*')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(10);
+            
+            if (logsError) {
+              console.error('Kullanıcı aktivite günlüğü getirme hatası:', logsError);
+              this.userLogs = [];
+            } else {
+              this.userLogs = logs || [];
+              console.log('Kullanıcı detaylı aktivite günlüğü:', this.userLogs.length);
+            }
+          } catch (err) {
+            console.error('Kullanıcı detayları getirme hatası:', err);
+            this.userStats = {
+              callCount: 0,
+              totalDuration: 0,
+              lastCall: null
+            };
+            this.userLogs = [];
+          }
+        },
+        
+        // Kullanıcıyı banla
+        async banUser() {
+          if (!this.selectedUser || !this.banReason) {
+            return;
+          }
+          
+          try {
+            // Ban süresini hesapla
+            const banDuration = parseInt(this.banDuration, 10);
+            const banUntil = new Date();
+            banUntil.setHours(banUntil.getHours() + banDuration);
+            
+            // Kullanıcıyı banla
+            const { error } = await supabaseClient
+              .from('profiles')
+              .update({
+                banned: true,
+                ban_reason: this.banReason,
+                ban_until: banUntil.toISOString()
+              })
+              .eq('id', this.selectedUser.id);
+            
+            if (error) {
+              console.error('Kullanıcı banlama hatası:', error);
+              return;
+            }
+            
+            // Aktivite günlüğüne kaydet
+            await supabaseClient
+              .from('activity_logs')
+              .insert({
+                user_id: this.selectedUser.id,
+                admin_id: this.user.id,
+                action: 'ban',
+                details: `Kullanıcı ${banDuration} saat banlandı. Sebep: ${this.banReason}`
+              });
+            
+            // Kullanıcıları yeniden yükle
+            await this.loadUsers();
+            
+            // Modalı kapat
+            this.showBanModal = false;
+            this.selectedUser = null;
+            this.banReason = '';
+            this.banDuration = '24';
+          } catch (err) {
+            console.error('Kullanıcı banlama hatası:', err);
+          }
+        },
+        
+        // Kullanıcı banını kaldır
+        async unbanUser(user) {
+          try {
+            // Kullanıcı banını kaldır
+            const { error } = await supabaseClient
+              .from('profiles')
+              .update({
+                banned: false,
+                ban_reason: null,
+                ban_until: null
+              })
+              .eq('id', user.id);
+            
+            if (error) {
+              console.error('Kullanıcı ban kaldırma hatası:', error);
+              return;
+            }
+            
+            // Aktivite günlüğüne kaydet
+            await supabaseClient
+              .from('activity_logs')
+              .insert({
+                user_id: user.id,
+                admin_id: this.user.id,
+                action: 'unban',
+                details: 'Kullanıcı banı kaldırıldı'
+              });
+            
+            // Kullanıcıları yeniden yükle
+            await this.loadUsers();
+          } catch (err) {
+            console.error('Kullanıcı ban kaldırma hatası:', err);
+          }
+        },
+        
+        // Admin ekle
+        async addAdmin() {
+          if (!this.newAdminEmail) {
+            return;
+          }
+          
+          try {
+            // E-posta ile kullanıcıyı bul
+            const { data: user, error: userError } = await supabaseClient
+              .from('profiles')
+              .select('*')
+              .eq('email', this.newAdminEmail)
+              .single();
+            
+            if (userError) {
+              console.error('Kullanıcı bulunamadı:', userError);
+              return;
+            }
+            
+            // Admin olarak ekle
+            const { error } = await supabaseClient
+              .from('admins')
+              .insert({
+                user_id: user.id,
+                created_by: this.user.id
+              });
+            
+            if (error) {
+              console.error('Admin ekleme hatası:', error);
+              return;
+            }
+            
+            // Aktivite günlüğüne kaydet
+            await supabaseClient
+              .from('activity_logs')
+              .insert({
+                user_id: user.id,
+                admin_id: this.user.id,
+                action: 'admin_add',
+                details: 'Kullanıcı admin olarak eklendi'
+              });
+            
+            // Adminleri yeniden yükle
+            await this.loadAdmins();
+            
+            // Formu temizle
+            this.newAdminEmail = '';
+          } catch (err) {
+            console.error('Admin ekleme hatası:', err);
+          }
+        },
+        
+        // Admin kaldır
+        async removeAdmin(admin) {
+          try {
+            // Admini kaldır
+            const { error } = await supabaseClient
+              .from('admins')
+              .delete()
+              .eq('user_id', admin.user_id);
+            
+            if (error) {
+              console.error('Admin kaldırma hatası:', error);
+              return;
+            }
+            
+            // Aktivite günlüğüne kaydet
+            await supabaseClient
+              .from('activity_logs')
+              .insert({
+                user_id: admin.user_id,
+                admin_id: this.user.id,
+                action: 'admin_remove',
+                details: 'Kullanıcı admin yetkisi kaldırıldı'
+              });
+            
+            // Adminleri yeniden yükle
+            await this.loadAdmins();
+          } catch (err) {
+            console.error('Admin kaldırma hatası:', err);
+          }
+        },
+        
+        // Sayfa değiştirme
+        async changePage(page) {
+          this.currentPage = page;
+          await this.loadUsers();
+        },
+        
+        // Kullanıcıları filtrele
+        async fetchUsers() {
+          this.currentPage = 1;
+          await this.loadUsers();
+        }
+      };
+    }
+  </script>
+</body>
+</html>
