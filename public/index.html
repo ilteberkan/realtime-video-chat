@@ -410,6 +410,7 @@ function videoChatApp() {
       this.loadUserData();
       this.setupEventListeners();
       this.checkSocketConnection();
+      this.setupSocketListeners();
     },
 
     // Toast bildirim sistemi
@@ -579,10 +580,14 @@ function videoChatApp() {
     // WebRTC kurulumu
     async setupWebRTC(iceServers) {
       try {
-        this.peerConnection = new RTCPeerConnection({ iceServers });
-        
-        // Mock video akışı ekle
-        this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        this.peerConnection = new RTCPeerConnection({
+          iceServers: iceServers || [
+            { urls: 'stun:stun.l.google.com:19302' }
+          ]
+        });
+
+        // Mock medya akışı
+        this.localStream = await this.getMockMediaStream();
         this.localStream.getTracks().forEach(track => {
           this.peerConnection.addTrack(track, this.localStream);
         });
@@ -590,18 +595,65 @@ function videoChatApp() {
         // Mock uzak akış
         this.peerConnection.ontrack = (event) => {
           this.remoteStream = event.streams[0];
+          this.peerVideoOff = false;
         };
 
-        // Mock bağlantı tamamlandı
-        setTimeout(() => {
-          this.peerVideoOff = false;
-          this.showToast('Bağlantı kuruldu!', 'success');
-        }, 1000);
+        // Bağlantı durum takibi
+        this.peerConnection.oniceconnectionstatechange = () => {
+          if (this.peerConnection.iceConnectionState === 'connected') {
+            this.showToast('Bağlantı başarıyla kuruldu', 'success');
+          }
+        };
+
+        // Mock sinyal alışverişi
+        const offer = await this.peerConnection.createOffer();
+        await this.peerConnection.setLocalDescription(offer);
 
       } catch (err) {
-        console.error('WebRTC hatası:', err);
-        this.showToast('Medya erişim hatası', 'error');
+        console.error('WebRTC kurulum hatası:', err);
+        this.showToast('Medya erişimi için izin gereklidir', 'error');
       }
+    },
+
+    // Mock medya akışı oluştur
+    async getMockMediaStream() {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+      } catch (error) {
+        console.log('Mock medya akışı oluşturuluyor...');
+        return new MediaStream([
+          new MediaStreamTrack({ kind: 'video' }),
+          new MediaStreamTrack({ kind: 'audio' })
+        ]);
+      }
+    },
+
+    // Socket dinleyicilerini kur
+    setupSocketListeners() {
+      if (this.socket) {
+        this.socket.on('match-found', (data) => this.handleMatchFound(data));
+        this.socket.on('disconnect', () => this.handleDisconnect());
+      }
+    },
+
+    // Bağlantı kesildiğinde
+    handleDisconnect() {
+      this.showToast('Bağlantı kesildi', 'error');
+      this.cleanupConnections();
+    },
+
+    // Temizlik fonksiyonunu güncelle
+    cleanupConnections() {
+      if (this.peerConnection) {
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
+      this.inCall = false;
+      this.searching = false;
+      this.peerVideoOff = true;
     }
   }
 }
