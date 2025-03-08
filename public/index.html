@@ -278,6 +278,38 @@
           }
         },
 
+        // Çıkış yap
+        async logout() {
+          try {
+            await supabase.createClient(
+              'https://unrfzoyltrqoyumrbhjo.supabase.co',
+              'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucmZ6b3lsdHJxb3l1bXJiaGpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA5NDg5NDEsImV4cCI6MjA1NjUyNDk0MX0.4p18-Ohwnerg-qUpKr4f4TQWVWKBJtSdTdmDaoTJLDE'
+            ).auth.signOut();
+            
+            this.user = null;
+            this.isAdmin = false;
+            
+            // Aktif bağlantıları temizle
+            if (this.inCall) {
+              await this.endCall();
+            }
+            
+            if (this.searching) {
+              await this.cancelSearch();
+            }
+            
+            this.showToast('Başarıyla çıkış yapıldı', 'success');
+            
+            // Sayfayı yenile
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } catch (err) {
+            console.error('Çıkış hatası:', err);
+            this.showToast('Çıkış yapılırken bir hata oluştu', 'error');
+          }
+        },
+
         // Görüşme kontrol fonksiyonları
         async endCall() {
           this.cleanupConnections();
@@ -404,153 +436,138 @@
           }
         },
 
-        // Aramayı başlat
+        // Eşleşme Arama
         async startSearch() {
           try {
             console.log('Arama başlatılıyor...');
-            if (!this.user) throw new Error('Kullanıcı girişi yapılmamış');
-            
-            // Eşleşme kuyruğunu kontrol et
-            const { data: queue, error } = await this.supabaseClient
-              .from('match_queue')
-              .select('*')
-              .neq('user_id', this.user.id)
-              .limit(1);
-            
-            if (error) throw error;
-            
-            if (queue.length > 0) {
-              console.log('Anında eşleşme bulundu');
-              const match = queue[0];
-              await this.supabaseClient
-                .from('match_queue')
-                .delete()
-                .eq('user_id', match.user_id);
-              
-              this.handleMatchFound({
-                roomId: `room_${this.user.id}_${match.user_id}`,
-                peerId: match.user_id,
-                iceServers: this.config.iceServers
-              });
-            } else {
-              console.log('Kuyruğa ekleniyor...');
-              await this.supabaseClient
-                .from('match_queue')
-                .insert([{ user_id: this.user.id }]);
-              
-              this.listenForMatches();
+            if (!this.user) {
+              this.showToast('Arama başlatmak için giriş yapmalısınız', 'warning');
+              return;
             }
-          } catch (err) {
-            console.error('Arama hatası:', err);
-            this.showToast(err.message, 'error');
-            this.searching = false;
-          }
-        },
-
-        async listenForMatches() {
-          this.matchChannel = this.supabaseClient
-            .channel('matches')
-            .on('postgres_changes', {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'match_queue',
-              filter: `user_id=neq.${this.user.id}`
-            }, payload => {
-              this.handleMatchFound({
-                roomId: `room_${this.user.id}_${payload.new.user_id}`,
-                peerId: payload.new.user_id,
-                iceServers: this.config.iceServers
+            
+            this.searching = true;
+            this.waitingAnimation = true;
+            
+            // Socket.io bağlantısı kur
+            if (!this.socket) {
+              this.socket = new window.MockSocket();
+              
+              // Eşleşme olaylarını dinle
+              this.socket.on('match-found', (data) => {
+                console.log('Eşleşme bulundu:', data);
+                this.handleMatchFound(data);
               });
-              this.supabaseClient
-                .from('match_queue')
-                .delete()
-                .eq('user_id', this.user.id);
-            })
-            .subscribe();
-        },
-
-        // Aramayı iptal et
-        async cancelSearch() {
-          this.searching = false;
-          this.waitingAnimation = false;
-          this.showToast('Arama iptal edildi', 'info');
-          
-          // Mock temizlik
-          if (this.socket && this.socket.mockTrigger) {
-            this.socket.mockTrigger('search-cancelled');
+            }
+            
+            // Eşleşme ara
+            this.socket.emit('search-match', {
+              userId: this.user.id,
+              email: this.user.email
+            });
+            
+            this.showToast('Eşleşme aranıyor...', 'info');
+          } catch (err) {
+            console.error('Arama başlatma hatası:', err);
+            this.showToast('Arama başlatılırken bir hata oluştu', 'error');
+            this.searching = false;
+            this.waitingAnimation = false;
           }
         },
 
-        // Eşleşme bulunduğunda çağrılır
-        handleMatchFound(data) {
-          this.inCall = true;
-          this.currentRoomId = data.roomId;
-          this.currentPeerId = data.peerId;
-          this.setupWebRTC(data.iceServers);
+        // Eşleşme bulunduğunda
+        async handleMatchFound(matchData) {
+          try {
+            console.log('Eşleşme işleniyor:', matchData);
+            
+            this.currentRoomId = matchData.roomId;
+            this.currentPeerId = matchData.peerId;
+            
+            // WebRTC bağlantısını kur
+            await this.setupWebRTC(matchData.iceServers);
+            
+            this.showToast('Eşleşme bulundu!', 'success');
+            this.inCall = true;
+            this.searching = false;
+            this.waitingAnimation = false;
+          } catch (err) {
+            console.error('Eşleşme işleme hatası:', err);
+            this.showToast('Bağlantı kurulurken bir hata oluştu', 'error');
+            this.searching = false;
+            this.waitingAnimation = false;
+          }
         },
 
         // WebRTC kurulumu
         async setupWebRTC(iceServers) {
           try {
-            console.groupCollapsed('WebRTC Kurulumu');
-            console.log('ICE Sunucuları:', iceServers);
+            console.log('WebRTC kurulumu başlatılıyor...');
             
-            this.peerConnection = new RTCPeerConnection({ iceServers });
-            console.log('PeerConnection oluşturuldu:', this.peerConnection);
+            // Medya izinlerini kontrol et
+            const hasPermissions = await this.checkMediaPermissions();
+            if (!hasPermissions) {
+              throw new Error('Kamera ve mikrofon izinleri gerekli');
+            }
             
-            // Mock medya akışı
-            this.localStream = await this.getMockMediaStream();
-            this.localStream.getTracks().forEach(track => {
-              this.peerConnection.addTrack(track, this.localStream);
-            });
-
-            // Mock uzak akış
-            this.peerConnection.ontrack = (event) => {
-              this.remoteStream = event.streams[0];
-              this.peerVideoOff = false;
-            };
-
-            // Bağlantı durum takibi
-            this.peerConnection.oniceconnectionstatechange = () => {
-              if (this.peerConnection.iceConnectionState === 'connected') {
-                this.showToast('Bağlantı başarıyla kuruldu', 'success');
-              }
-            };
-
-            // Mock sinyal alışverişi
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
-            
-            console.groupEnd();
-          } catch (err) {
-            console.error('WebRTC Hatası:', err);
-            throw err;
-          }
-        },
-
-        // Mock medya akışı oluştur
-        async getMockMediaStream() {
-          try {
-            // Gerçek medya akışı dene
-            return await navigator.mediaDevices.getUserMedia({
+            // Yerel medya akışını al
+            this.localStream = await navigator.mediaDevices.getUserMedia({
               video: true,
               audio: true
             });
+            
+            // Yerel videoyu göster
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+              localVideo.srcObject = this.localStream;
+            }
+            
+            // WebRTC bağlantısını oluştur
+            this.peerConnection = new RTCPeerConnection({
+              iceServers: iceServers || [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+              ]
+            });
+            
+            // Yerel medya akışını ekle
+            this.localStream.getTracks().forEach(track => {
+              this.peerConnection.addTrack(track, this.localStream);
+            });
+            
+            // Uzak medya akışını dinle
+            this.peerConnection.ontrack = (event) => {
+              console.log('Uzak medya akışı alındı');
+              this.remoteStream = event.streams[0];
+              
+              const remoteVideo = document.getElementById('remoteVideo');
+              if (remoteVideo) {
+                remoteVideo.srcObject = this.remoteStream;
+              }
+              
+              this.peerVideoOff = false;
+            };
+            
+            console.log('WebRTC kurulumu tamamlandı');
+            return true;
+          } catch (err) {
+            console.error('WebRTC kurulum hatası:', err);
+            this.showToast(err.message, 'error');
+            return false;
+          }
+        },
+
+        // Medya izinlerini kontrol et
+        async checkMediaPermissions() {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: true, 
+              audio: true 
+            });
+            stream.getTracks().forEach(track => track.stop());
+            return true;
           } catch (error) {
-            // Mock video element oluştur
-            const mockVideo = document.createElement('video');
-            mockVideo.src = 'https://samplelib.com/lib/preview/mp4/sample-5s.mp4';
-            mockVideo.loop = true;
-            await mockVideo.play();
-            
-            const videoTrack = mockVideo.captureStream().getVideoTracks()[0];
-            const audioContext = new AudioContext();
-            const oscillator = audioContext.createOscillator();
-            const audioDestination = audioContext.createMediaStreamDestination();
-            oscillator.connect(audioDestination);
-            oscillator.start();
-            
-            return new MediaStream([videoTrack, ...audioDestination.stream.getAudioTracks()]);
+            console.error('Medya izin hatası:', error);
+            this.showToast('Kamera ve mikrofon izinleri gerekli', 'warning');
+            return false;
           }
         },
 
@@ -585,20 +602,6 @@
           this.searching = false;
           this.peerVideoOff = true;
           this.messages = [];
-        },
-
-        async checkMediaPermissions() {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-              video: true, 
-              audio: true 
-            });
-            stream.getTracks().forEach(track => track.stop());
-            return true;
-          } catch (error) {
-            this.showToast('Kamera/mikrofon erişimi gereklidir', 'warning');
-            return false;
-          }
         },
 
         // Medya Kontrol Metodları
