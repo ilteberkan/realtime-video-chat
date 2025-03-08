@@ -123,18 +123,20 @@
       <div class="col-12 col-md-8 text-center">
         <h1 class="display-5 fw-bold mb-4">Anlık Görüntülü Sohbet</h1>
         
-        <div class="d-grid gap-3">
-          <button class="btn btn-primary btn-lg py-3" 
-                  @click="toggleSearch()"
-                  :disabled="searching">
-            <i class="bi-search me-2"></i>
-            <span x-text="searching ? 'Eşleşme Aranıyor...' : 'Hemen Başla'"></span>
-          </button>
-          
-          <div class="text-muted small" x-show="user">
-            <i class="bi-person-check me-1"></i>
-            <span x-text="user.email"></span> olarak giriş yapıldı
+        <template x-if="user">
+          <div class="d-grid gap-3">
+            <button class="btn btn-primary btn-lg py-3" 
+                    @click="toggleSearch()"
+                    :disabled="searching">
+              <i class="bi-search me-2"></i>
+              <span x-text="searching ? 'Eşleşme Aranıyor...' : 'Hemen Başla'"></span>
+            </button>
           </div>
+        </template>
+        
+        <div class="text-muted small" x-show="user">
+          <i class="bi-person-check me-1"></i>
+          <span x-text="user.email"></span> olarak giriş yapıldı
         </div>
       </div>
     </div>
@@ -154,8 +156,27 @@
       </div>
     </div>
 
+    <!-- Görüşme Kontrolleri -->
+    <div class="row mt-3" x-show="inCall">
+      <div class="col-12">
+        <div class="d-flex justify-content-center gap-2">
+          <button class="btn btn-outline-secondary" 
+                  @click="toggleVideo()"
+                  :class="{ 'btn-danger': isVideoOff }">
+            <i class="bi" :class="isVideoOff ? 'bi-camera-video-off' : 'bi-camera-video'"></i>
+          </button>
+          
+          <button class="btn btn-outline-secondary" 
+                  @click="toggleAudio()"
+                  :class="{ 'btn-danger': isMuted }">
+            <i class="bi" :class="isMuted ? 'bi-mic-mute' : 'bi-mic'"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Görüşme Ekranı -->
-    <div class="row g-4" x-show="inCall">
+    <div class="row mt-4 g-4" x-show="inCall">
       <div class="col-md-8">
         <div class="card border-0 shadow-sm">
           <div class="card-body p-0">
@@ -423,24 +444,60 @@
         // Aramayı başlat
         async startSearch() {
           try {
-            // Gerçek medya izinlerini kontrol et
-            const hasMediaAccess = await this.checkMediaPermissions();
-            
-            // Mock eşleşme süresini rastgele yap
-            const mockDelay = Math.floor(Math.random() * 4000) + 1000;
-            
-            setTimeout(() => {
-              this.handleMatchFound({
-                roomId: 'mock_room_' + Date.now(),
-                peerId: 'mock_peer_' + Math.random().toString(36).substr(2, 9),
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-              });
-            }, mockDelay);
+            // Sunucu kuyruğunu kontrol et
+            const { data: queue } = await this.supabaseClient
+              .from('match_queue')
+              .select('*')
+              .neq('user_id', this.user.id)
+              .limit(1);
 
+            if (queue.length > 0) {
+              // Hemen eşleş
+              const match = queue[0];
+              await this.supabaseClient
+                .from('match_queue')
+                .delete()
+                .eq('user_id', match.user_id);
+              
+              this.handleMatchFound({
+                roomId: `room_${this.user.id}_${match.user_id}`,
+                peerId: match.user_id,
+                iceServers: this.config.iceServers
+              });
+            } else {
+              // Kuyruğa ekle ve bekle
+              await this.supabaseClient
+                .from('match_queue')
+                .insert([{ user_id: this.user.id }]);
+              
+              this.listenForMatches();
+            }
           } catch (err) {
-            console.error('Arama başlatma hatası:', err);
-            this.showToast('Demo arama başlatılamadı', 'error');
+            console.error('Eşleşme hatası:', err);
+            this.showToast('Eşleşme sırasında hata oluştu', 'error');
           }
+        },
+
+        async listenForMatches() {
+          this.matchChannel = this.supabaseClient
+            .channel('matches')
+            .on('postgres_changes', {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'match_queue',
+              filter: `user_id=neq.${this.user.id}`
+            }, payload => {
+              this.handleMatchFound({
+                roomId: `room_${this.user.id}_${payload.new.user_id}`,
+                peerId: payload.new.user_id,
+                iceServers: this.config.iceServers
+              });
+              this.supabaseClient
+                .from('match_queue')
+                .delete()
+                .eq('user_id', this.user.id);
+            })
+            .subscribe();
         },
 
         // Aramayı iptal et
@@ -572,6 +629,27 @@
             this.showToast('Kamera/mikrofon erişimi gereklidir', 'warning');
             return false;
           }
+        },
+
+        // Medya Kontrol Metodları
+        toggleVideo() {
+          this.isVideoOff = !this.isVideoOff;
+          if (this.localStream) {
+            this.localStream.getVideoTracks().forEach(track => {
+              track.enabled = !this.isVideoOff;
+            });
+          }
+          this.showToast(`Kamera ${this.isVideoOff ? 'kapatıldı' : 'açıldı'}`);
+        },
+
+        toggleAudio() {
+          this.isMuted = !this.isMuted;
+          if (this.localStream) {
+            this.localStream.getAudioTracks().forEach(track => {
+              track.enabled = !this.isMuted;
+            });
+          }
+          this.showToast(`Mikrofon ${this.isMuted ? 'kapatıldı' : 'açıldı'}`);
         }
       }
     }
