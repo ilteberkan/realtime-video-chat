@@ -36,21 +36,21 @@ router.get('/check', async (req, res) => {
     const { data: adminData, error: adminError } = await supabase
       .from('admins')
       .select('*')
-      .eq('user_id', userData.user.id)
-      .single();
+      .eq('user_id', userData.user.id);
     
-    if (adminError) {
+    // Tablo yoksa veya kullanıcı admin değilse
+    if (adminError || !adminData || adminData.length === 0) {
       console.log('Admin tablosunda kullanıcı bulunamadı:', adminError);
       
-      // Eğer admin tablosu yoksa veya başka bir hata varsa
-      if (adminError.code === 'PGRST116') {
+      // İlk kullanıcıyı admin yap (test için)
+      if (adminError && adminError.code === 'PGRST116') {
         console.log('Admin tablosu bulunamadı, tablo oluşturuluyor...');
         
         // Admin tablosunu oluştur
         await supabase.rpc('create_admin_table');
         
-        // İlk kullanıcıyı admin yap (test için)
-        await supabase
+        // İlk kullanıcıyı admin yap
+        const { error: insertError } = await supabase
           .from('admins')
           .insert({
             user_id: userData.user.id,
@@ -58,14 +58,14 @@ router.get('/check', async (req, res) => {
             updated_at: new Date().toISOString()
           });
         
+        if (insertError) {
+          console.log('Admin ekleme hatası:', insertError);
+          return res.json({ data: { isAdmin: false } });
+        }
+        
         return res.json({ data: { isAdmin: true } });
       }
       
-      return res.json({ data: { isAdmin: false } });
-    }
-    
-    if (!adminData) {
-      console.log('Kullanıcı admin değil');
       return res.json({ data: { isAdmin: false } });
     }
     

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sayfa Bulunamadı - 404</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-text: #333333;
+      --color-primary: #4f46e5;
+    }
+    
+    .dark {
+      --color-bg: #1f2937;
+      --color-text: #f3f4f6;
+      --color-primary: #6366f1;
+    }
+    
+    body {
+      background-color: var(--color-bg);
+      color: var(--color-text);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center">
+  <div class="text-center p-8">
+    <h1 class="text-6xl font-bold text-indigo-600 mb-4">404</h1>
+    <h2 class="text-2xl font-semibold mb-4">Sayfa Bulunamadı</h2>
+    <p class="text-lg mb-8">Aradığınız sayfa mevcut değil veya taşınmış olabilir.</p>
+    <a href="/" class="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 transition-colors">
+      Ana Sayfaya Dön
+    </a>
+  </div>
+  
+  <script>
+    // Sistem karanlık mod ayarını kontrol et
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('dark');
+    }
+  </script>
+</body>
+</html> 

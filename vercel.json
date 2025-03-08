@@ -13,18 +13,34 @@
   "routes": [
     {
       "src": "/socket.io/(.*)",
-      "dest": "src/server.js"
+      "dest": "src/server.js",
+      "headers": {
+        "Connection": "upgrade",
+        "Upgrade": "websocket"
+      }
     },
     {
       "src": "/api/(.*)",
       "dest": "src/server.js"
     },
     {
-      "src": "/(.*)",
-      "dest": "public/$1"
+      "src": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico))",
+      "dest": "/public/$1"
     },
     {
-      "src": "/",
+      "src": "/admin.html",
+      "dest": "/public/admin.html"
+    },
+    {
+      "src": "/admin",
+      "dest": "/public/admin.html"
+    },
+    {
+      "src": "/404",
+      "dest": "/public/404.html"
+    },
+    {
+      "src": "/(.*)",
       "dest": "src/server.js"
     }
   ]

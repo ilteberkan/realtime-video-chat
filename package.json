@@ -1,25 +1,22 @@
 {
   "name": "realtime-video-chat",
   "version": "1.0.0",
-  "description": "Realtime görüntülü sohbet uygulaması",
+  "description": "Realtime video chat application",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "vercel-build": "echo 'Build completed'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.3",
-    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "helmet": "^7.1.0",
     "socket.io": "^4.7.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=14.0.0"

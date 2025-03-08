@@ -653,7 +653,9 @@
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      forceNew: true,
+      upgrade: true
     });
     
     // Tarih formatı
@@ -738,36 +740,47 @@
             // Admin kontrolü
             await this.checkAdmin();
             
-            if (this.isAdmin) {
-              // Dashboard verilerini yükle
-              await this.loadDashboardData();
-              
-              // Kullanıcıları yükle
-              await this.loadUsers();
-              
-              // Aktivite günlüğünü yükle
-              await this.loadActivityLogs();
-              
-              // Adminleri yükle
-              await this.loadAdmins();
-            } else {
+            if (!this.isAdmin) {
+              console.error('Admin yetkisi yok');
               window.location.href = '/';
+              return;
             }
+            
+            // Verileri yükle
+            await this.loadDashboardData();
           } catch (err) {
             console.error('Admin paneli başlatma hatası:', err);
           }
         },
         
-        // Tema değiştirme
-        toggleTheme() {
-          this.darkMode = !this.darkMode;
-          localStorage.setItem('darkMode', this.darkMode);
+        // Giriş yap
+        async login() {
+          try {
+            const { data, error } = await supabaseClient.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo: window.location.origin + '/admin'
+              }
+            });
+            
+            if (error) {
+              console.error('Giriş hatası:', error);
+            }
+          } catch (err) {
+            console.error('Giriş hatası:', err);
+          }
         },
         
-        // Çıkış yapma
+        // Çıkış yap
         async logout() {
           try {
-            await supabaseClient.auth.signOut();
+            const { error } = await supabaseClient.auth.signOut();
+            
+            if (error) {
+              console.error('Çıkış hatası:', error);
+              return;
+            }
+            
             window.location.href = '/';
           } catch (err) {
             console.error('Çıkış hatası:', err);
