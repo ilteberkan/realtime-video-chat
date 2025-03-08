@@ -400,156 +400,137 @@
     }
   },
   // WebRTC bağlantısını kur
-  async setupPeerConnection(iceServers) { 
+  async setupWebRTC(iceServers = null) {
     try {
-      if (this.peerConnection) {
-        this.peerConnection.close();
-        this.peerConnection = null;
-      }
-
-      // Socket bağlantısı yoksa hata fırlat
-      if (!this.socket) {
-        throw new Error('Socket bağlantısı kurulmadan WebRTC bağlantısı kurulamaz');
-      }
-      
-      // PeerConnection oluştur
-      this.peerConnection = new RTCPeerConnection({
-        iceServers: iceServers || [
+      if (!iceServers) {
+        iceServers = [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      });
-      
-      // Yerel medya akışını ekle
-      if (this.localStream) {
-        this.localStream.getTracks().forEach(track => {
-          this.peerConnection.addTrack(track, this.localStream);
-        });
+        ];
       }
       
-      // ICE aday olayını dinle
-      this.peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          this.socket.emit('ice-candidate', {
-            roomId: this.currentRoomId,
-            candidate: event.candidate
-          });
-        }
-      };
-      
-      // Bağlantı durumu değişikliğini dinle
-      this.peerConnection.onconnectionstatechange = (event) => {
-        console.log('Bağlantı durumu değişti:', this.peerConnection.connectionState);
+      // Yerel medya akışını kurma
+      if (!this.localStream) {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
         
-        if (this.peerConnection.connectionState === 'disconnected' || 
-            this.peerConnection.connectionState === 'failed' || 
-            this.peerConnection.connectionState === 'closed') {
-          console.log('WebRTC bağlantısı koptu');
-          
-          // Bağlantı koptuğunda UI'ı güncelle
-          if (this.inCall) {
-            this.showToast('Bağlantı koptu, yeniden bağlanmaya çalışılıyor...', 'warning');
-            
-            // Kısa bir süre sonra yeniden bağlanmayı dene
-            setTimeout(() => {
-              if (this.inCall && !this.peerConnection) {
-                this.setupPeerConnection(iceServers);
-              }
-            }, 2000);
-          }
+        // Yerel videoyu göster
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) {
+          localVideo.srcObject = this.localStream;
         }
-      };
+        
+        console.log('Yerel medya akışı kuruldu');
+      }
       
-      // Uzak akış olayını dinle
+      // Peer bağlantısını oluştur
+      this.peerConnection = new RTCPeerConnection({
+        iceServers: iceServers
+      });
+      
+      // Yerel medya akışını peer bağlantısına ekle
+      this.localStream.getTracks().forEach(track => {
+        this.peerConnection.addTrack(track, this.localStream);
+      });
+      
+      // Uzak tarafın medya akışını dinle
       this.peerConnection.ontrack = (event) => {
-        console.log('Uzak akış alındı:', event.streams[0]);
+        console.log('Uzak taraftan medya akışı alındı');
         this.remoteStream = event.streams[0];
         
-        // Uzak video elementini ayarla
+        // Uzak videoyu göster
         const remoteVideo = document.getElementById('remoteVideo');
         if (remoteVideo) {
           remoteVideo.srcObject = this.remoteStream;
         }
         
-        // Karşı tarafın video durumunu varsayılan olarak açık ayarla
         this.peerVideoOff = false;
-        
-        // Video durumunu karşı tarafa bildir
-        if (this.socket && this.currentRoomId) {
-          this.socket.emit('video-status', {
-            roomId: this.currentRoomId,
-            isVideoOff: this.isVideoOff
-          });
+      };
+      
+      // ICE aday olaylarını dinle
+      this.peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          if (this.socket) {
+            // Mock socket kontrolü
+            if (typeof this.socket.mockTrigger !== 'function') {
+              this.socket.emit('ice-candidate', {
+                roomId: this.currentRoomId,
+                candidate: event.candidate,
+                userId: this.user.id,
+                peerId: this.currentPeerId
+              });
+            } else {
+              console.log('Mock socket - ICE adayı gönderildi (simülasyon)');
+            }
+          }
         }
       };
       
-      console.log('WebRTC bağlantısı kuruldu');
-      return this.peerConnection;
+      // Bağlantı durumu değişikliğini dinle
+      this.peerConnection.onconnectionstatechange = () => {
+        console.log('WebRTC bağlantı durumu:', this.peerConnection.connectionState);
+        
+        if (this.peerConnection.connectionState === 'connected') {
+          this.showToast('Bağlantı kuruldu', 'success');
+          this.inCall = true;
+          this.searching = false;
+          this.waitingAnimation = false;
+        } else if (this.peerConnection.connectionState === 'disconnected' || 
+                  this.peerConnection.connectionState === 'failed') {
+          this.showToast('Bağlantı kesildi', 'error');
+          this.inCall = false;
+          this.cleanupConnections();
+        }
+      };
+      
+      return true;
     } catch (err) {
-      console.error('WebRTC bağlantısı kurma hatası:', err);
-      this.showToast('Video bağlantısı kurulurken bir hata oluştu', 'error');
-      throw err;
+      console.error('WebRTC kurulum hatası:', err);
+      this.showToast('Kamera ve mikrofon erişimi gereklidir', 'error');
+      return false;
     }
   },
   // Önceki bağlantıları temizle
-  cleanupPreviousConnections() {
+  async cleanupConnections() {
+    console.log('Önceki bağlantılar temizleniyor');
+    
     try {
-      // WebRTC bağlantısını kapat
+      // Peer bağlantısını kapat
       if (this.peerConnection) {
+        if (this.peerConnection.getTransceivers) {
+          this.peerConnection.getTransceivers().forEach(transceiver => {
+            if (transceiver.stop) {
+              transceiver.stop();
+            }
+          });
+        }
+        
+        // Tüm track'leri kapat
+        if (this.peerConnection.getSenders) {
+          this.peerConnection.getSenders().forEach(sender => {
+            if (sender.track) {
+              sender.track.stop();
+            }
+          });
+        }
+        
         this.peerConnection.close();
         this.peerConnection = null;
       }
       
-      // Yerel video akışını durdur
-      if (this.localStream) {
-        this.localStream.getTracks().forEach(track => {
-          track.stop();
-        });
-        this.localStream = null;
-      }
-      
-      // Uzak video akışını temizle
+      // Uzak akışı temizle
       if (this.remoteStream) {
-        this.remoteStream.getTracks().forEach(track => {
-          track.stop();
-        });
+        this.remoteStream.getTracks().forEach(track => track.stop());
         this.remoteStream = null;
       }
       
-      // Uzak video elementini temizle
-      const remoteVideo = document.getElementById('remoteVideo');
-      if (remoteVideo) {
-        remoteVideo.srcObject = null;
-      }
-      
-      // Yerel video elementini temizle
-      const localVideo = document.getElementById('localVideo');
-      if (localVideo) {
-        localVideo.srcObject = null;
-      }
-      
-      // Önizleme video elementini temizle
-      const previewVideo = document.getElementById('previewVideo');
-      if (previewVideo) {
-        previewVideo.srcObject = null;
-      }
-      
-      // Eşleşme kontrolünü temizle
-      if (this.matchCheckInterval) {
-        clearInterval(this.matchCheckInterval);
-        this.matchCheckInterval = null;
-      }
-      
-      // Oda ve eşleşme bilgilerini temizle
-      this.currentRoomId = null;
-      this.currentPeerId = null;
-      
-      // Peer video durumunu sıfırla
-      this.peerVideoOff = true;
-      
       console.log('Önceki bağlantılar temizlendi');
+      return true;
     } catch (err) {
       console.error('Bağlantı temizleme hatası:', err);
+      return false;
     }
   },
   // Görüşmeyi sonlandır ve yeni eşleşme bul
@@ -573,7 +554,7 @@
       }
       
       // Bağlantıları temizle
-      this.cleanupPreviousConnections();
+      await this.cleanupConnections();
       
       // UI'ı sıfırla
       this.inCall = false;
@@ -615,7 +596,7 @@
       }
       
       // Bağlantıları temizle
-      this.cleanupPreviousConnections();
+      await this.cleanupConnections();
       
       // UI'ı sıfırla
       this.inCall = false;
