@@ -206,20 +206,9 @@
       </div>
       
       <div class="space-y-4">
-        <button
-          x-show="!searching" 
-          @click="toggleSearch()" 
-          class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transform transition hover:scale-105"
-        >
-          Arama Başlat
-        </button>
-        
-        <button
-          x-show="searching" 
-          @click="cancelSearch()" 
-          class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transform transition hover:scale-105"
-        >
-          Aramayı İptal Et
+        <button @click="toggleSearch()" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transform transition hover:scale-105"
+                x-text="searching ? 'Aramayı İptal Et' : 'Arama Başlat'">
         </button>
       </div>
     </div>
@@ -526,7 +515,94 @@ function videoChatApp() {
       if (this.localStream) this.localStream.getTracks().forEach(track => track.stop());
     },
 
-    // ... diğer metodlar ...
+    // Arama başlat/durdur metodu
+    async toggleSearch() {
+      if (this.searching) {
+        await this.cancelSearch();
+      } else {
+        await this.startSearch();
+      }
+    },
+
+    // Aramayı başlat
+    async startSearch() {
+      try {
+        if (!this.user) {
+          this.showToast('Arama için giriş yapmalısınız', 'warning');
+          return;
+        }
+
+        this.searching = true;
+        this.waitingAnimation = true;
+        
+        // Mock eşleşme tetikleme
+        if (this.socket && this.socket.mockTrigger) {
+          setTimeout(() => {
+            this.socket.mockTrigger('match-found', {
+              roomId: 'mock_room_' + Date.now(),
+              peerId: 'mock_peer_123',
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+              ]
+            });
+          }, 3000);
+        }
+
+        this.showToast('Eşleşme aranıyor...', 'info');
+      } catch (err) {
+        console.error('Arama başlatma hatası:', err);
+        this.searching = false;
+        this.waitingAnimation = false;
+      }
+    },
+
+    // Aramayı iptal et
+    async cancelSearch() {
+      this.searching = false;
+      this.waitingAnimation = false;
+      this.showToast('Arama iptal edildi', 'info');
+      
+      // Mock temizlik
+      if (this.socket && this.socket.mockTrigger) {
+        this.socket.mockTrigger('search-cancelled');
+      }
+    },
+
+    // Eşleşme bulunduğunda çağrılır
+    handleMatchFound(data) {
+      this.inCall = true;
+      this.currentRoomId = data.roomId;
+      this.currentPeerId = data.peerId;
+      this.setupWebRTC(data.iceServers);
+    },
+
+    // WebRTC kurulumu
+    async setupWebRTC(iceServers) {
+      try {
+        this.peerConnection = new RTCPeerConnection({ iceServers });
+        
+        // Mock video akışı ekle
+        this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        this.localStream.getTracks().forEach(track => {
+          this.peerConnection.addTrack(track, this.localStream);
+        });
+
+        // Mock uzak akış
+        this.peerConnection.ontrack = (event) => {
+          this.remoteStream = event.streams[0];
+        };
+
+        // Mock bağlantı tamamlandı
+        setTimeout(() => {
+          this.peerVideoOff = false;
+          this.showToast('Bağlantı kuruldu!', 'success');
+        }, 1000);
+
+      } catch (err) {
+        console.error('WebRTC hatası:', err);
+        this.showToast('Medya erişim hatası', 'error');
+      }
+    }
   }
 }
 </script>
