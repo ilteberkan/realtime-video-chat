@@ -90,11 +90,9 @@
         <button 
           x-show="!user"
           @click="login()" 
-          class="flex items-center space-x-2 bg-white text-gray-800 px-4 py-2 ml-4 rounded-lg hover:bg-gray-100"
+          class="btn btn-primary d-flex align-items-center gap-2"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24">
-            <!-- Google SVG icon -->
-          </svg>
+          <i class="bi-google"></i>
           <span>Google ile Giriş Yap</span>
         </button>
         <template x-if="user">
