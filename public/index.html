@@ -411,21 +411,65 @@
       
       // Yerel medya akışını kurma
       if (!this.localStream) {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
-        
-        // Yerel videoyu göster
-        const localVideo = document.getElementById('localVideo');
-        if (localVideo) {
-          localVideo.srcObject = this.localStream;
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+          });
+          
+          // Yerel videoyu göster
+          const localVideo = document.getElementById('localVideo');
+          if (localVideo) {
+            localVideo.srcObject = this.localStream;
+          }
+          
+          console.log('Yerel medya akışı kuruldu');
+        } catch (err) {
+          console.error('Kamera/mikrofon erişimi hatası:', err);
+          
+          // Sadece ses ile devam et
+          try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({
+              video: false,
+              audio: true
+            });
+            this.isVideoOff = true;
+            this.showToast('Kamera erişimi sağlanamadı, ses ile devam ediliyor', 'warning');
+          } catch (audioErr) {
+            console.error('Ses erişimi hatası:', audioErr);
+            this.showToast('Mikrofon erişimi sağlanamadı', 'error');
+            throw audioErr;
+          }
         }
-        
-        console.log('Yerel medya akışı kuruldu');
       }
       
-      // Peer bağlantısını oluştur
+      // Mock sistemde, 2 saniye içinde uzaktan video akışı göster
+      if (!this.socket || typeof this.socket.mockTrigger === 'function') {
+        // Yerel video akışını klonlayarak uzaktan gelen gibi göster (demo amaçlı)
+        setTimeout(() => {
+          try {
+            // Gerçek bir peer olmadığı için, yerel akışın bir kopyasını uzak akış gibi göster
+            this.remoteStream = this.localStream.clone();
+            
+            const remoteVideo = document.getElementById('remoteVideo');
+            if (remoteVideo) {
+              remoteVideo.srcObject = this.remoteStream;
+              
+              // Kamera aktif duruma getir
+              this.peerVideoOff = false;
+              this.inCall = true;
+              
+              this.showToast('Görüntülü görüşme başladı', 'success');
+            }
+          } catch (err) {
+            console.error('Demo video oluşturma hatası:', err);
+          }
+        }, 2000);
+        
+        return true;
+      }
+      
+      // Gerçek WebRTC akışı (socket.io aktif olduğunda)
       this.peerConnection = new RTCPeerConnection({
         iceServers: iceServers
       });
@@ -809,6 +853,74 @@
     window.addEventListener('hashchange', () => {
       this.loadUserData();
     });
+  },
+  // Mesaj gönderme fonksiyonu 
+  sendMessage() {
+    if (this.messageText.trim() === '') return;
+    
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + 
+                   now.getMinutes().toString().padStart(2, '0');
+    
+    // Yeni mesajı ekle
+    const newMessage = {
+      text: this.messageText,
+      time: timeStr,
+      isMe: true
+    };
+    
+    this.messages.push(newMessage);
+    
+    // Socket varsa mesajı gönder
+    if (this.socket) {
+      this.socket.emit('send-message', {
+        roomId: this.currentRoomId,
+        message: this.messageText,
+        userId: this.user?.id,
+        senderName: this.user?.name || 'Misafir'
+      });
+    }
+    
+    // Mock sistemde, karşıdan gelen cevap ekleyelim
+    if (this.socket && typeof this.socket.mockTrigger === 'function') {
+      setTimeout(() => {
+        const responses = [
+          "Merhaba, nasılsın?",
+          "Anladım, devam et lütfen.",
+          "Bu çok ilginç!",
+          "Seninle konuşmak güzel.",
+          "Daha fazla bilgi verebilir misin?"
+        ];
+        
+        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+        
+        const mockMessage = {
+          text: randomResponse,
+          time: timeStr,
+          isMe: false
+        };
+        
+        this.messages.push(mockMessage);
+        
+        // Mesaj listesini aşağı kaydır
+        this.scrollToBottom();
+      }, 1000);
+    }
+    
+    // Input alanını temizle
+    this.messageText = '';
+    
+    // Mesaj listesini aşağı kaydır
+    this.$nextTick(() => {
+      this.scrollToBottom();
+    });
+  },
+  // Mesaj listesini en alta kaydır
+  scrollToBottom() {
+    const messageList = document.getElementById('messageList');
+    if (messageList) {
+      messageList.scrollTop = messageList.scrollHeight;
+    }
   }
 }" :class="darkMode ? 'dark' : ''" x-init="loadUserData(); setupEventListeners()">
   <!-- Header -->
@@ -991,9 +1103,9 @@
       </div>
 
       <!-- Video ve Sohbet Grid -->
-      <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px]">
+      <div class="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-4 max-h-[calc(100vh-200px)]">
         <!-- Yerel Video -->
-        <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden">
+        <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden lg:col-span-1">
           <video 
             id="localVideo" 
             class="w-full h-full object-cover video-mirror"
@@ -1002,20 +1114,91 @@
             muted
           ></video>
           <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-center py-1">
-            Siz
+            Siz <span x-text="user?.name || 'Misafir'"></span>
           </div>
         </div>
         
         <!-- Uzak Video -->
-        <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden">
+        <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden lg:col-span-1">
           <video 
             id="remoteVideo" 
             class="w-full h-full object-cover"
             autoplay
             playsinline
           ></video>
-          <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-center py-1">
+          <div 
+            x-show="!peerVideoOff" 
+            class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-center py-1"
+          >
             Karşı Taraf
+          </div>
+          <div 
+            x-show="peerVideoOff || !inCall" 
+            class="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-75 text-white text-center"
+          >
+            <div>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              <p x-show="!inCall">Henüz bir görüşme başlatılmadı</p>
+              <p x-show="inCall && peerVideoOff">Karşı taraf kamerasını kapattı</p>
+            </div>
+          </div>
+        
+        <!-- Chat Alanı -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg flex flex-col lg:col-span-1 h-[calc(100vh-200px)]">
+          <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="font-bold text-lg">Sohbet</h3>
+          </div>
+          
+          <!-- Mesaj Listesi -->
+          <div class="flex-1 overflow-y-auto p-4 space-y-4" id="messageList">
+            <template x-for="(message, index) in messages" :key="index">
+              <div :class="{
+                'flex flex-col': true,
+                'items-end': message.isMe,
+                'items-start': !message.isMe
+              }">
+                <div :class="{
+                  'max-w-xs rounded-lg p-3': true,
+                  'bg-indigo-500 text-white': message.isMe,
+                  'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white': !message.isMe
+                }">
+                  <p x-text="message.text"></p>
+                </div>
+                <span class="text-xs text-gray-500 mt-1" x-text="message.time"></span>
+              </div>
+            </template>
+            
+            <!-- Boş durumda gösterilecek -->
+            <div x-show="messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <p>Henüz mesaj yok</p>
+            </div>
+          </div>
+          
+          <!-- Mesaj Gönderme Formu -->
+          <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+            <form @submit.prevent="sendMessage()" class="flex">
+              <input 
+                type="text" 
+                x-model="messageText" 
+                placeholder="Mesajınızı yazın..." 
+                class="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                :disabled="!inCall"
+              >
+              <button 
+                type="submit" 
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-r-lg"
+                :disabled="!inCall"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                </svg>
+              </button>
+            </form>
           </div>
         </div>
       </div>
