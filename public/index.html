@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-bs-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Opia - Görüntülü ve Sesli Sohbet</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opia - Görüntülü Sohbet</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css">
   <script src="https://unpkg.com/alpinejs@3.10.3/dist/cdn.min.js" defer></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
   <script>
@@ -53,610 +56,489 @@
   <!-- Favicon -->
   <link rel="icon" href="data:,">
   <style>
-    :root {
-      --color-bg: #ffffff;
-      --color-text: #333333;
-      --color-primary: #4f46e5;
-      --color-secondary: #818cf8;
-      --color-accent: #c7d2fe;
-      --color-card: #f3f4f6;
+    .video-container {
+      position: relative;
+      padding-top: 56.25%; /* 16:9 aspect ratio */
     }
-    
-    .dark {
-      --color-bg: #1f2937;
-      --color-text: #f3f4f6;
-      --color-primary: #6366f1;
-      --color-secondary: #818cf8;
+    .video-container video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
-    
-    body {
-      background-color: var(--color-bg);
-      color: var(--color-text);
-    }
-    
-    .logo {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      font-weight: bold;
-      font-size: 1.5rem;
-      color: var(--color-primary);
-    }
-    
-    .logo svg {
-      width: 40px;
-      height: 40px;
-      vertical-align: middle;
-      margin-right: 8px;
+    .message-bubble {
+      max-width: 75%;
+      border-radius: 1.25rem;
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col" 
-  x-data="videoChatApp()" 
-  :class="darkMode ? 'dark' : ''" 
-  x-init="initApp()">
-  <!-- Header -->
-  <header class="bg-white dark:bg-gray-900 shadow-md py-4">
-    <div class="container mx-auto flex justify-between items-center px-4">
-      <div class="logo flex items-center">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-        Opia
-      </div>
-      <div class="flex items-center">
-        <!-- Tema değiştirme butonu -->
-        <button @click="toggleTheme()" class="p-2 rounded-full hover:bg-indigo-700">
-          <svg x-show="!darkMode" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
-          <svg x-show="darkMode" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
+<body class="d-flex flex-column min-vh-100">
+  <header class="navbar navbar-expand-lg bg-body-tertiary shadow-sm">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center" href="#">
+        <i class="bi-camera-video fs-3 text-primary me-2"></i>
+        <span class="fw-bold">Opia</span>
+      </a>
+      <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-link text-decoration-none" 
+                @click="toggleTheme()"
+                aria-label="Tema değiştir">
+          <i class="bi" :class="darkMode ? 'bi-sun' : 'bi-moon'"></i>
         </button>
-        
-        <!-- Kullanıcı giriş yapmadıysa Google ile giriş butonu göster -->
-        <button @click="login()" 
-                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
-          Google ile Giriş Yap
-        </button>
-        
-        <!-- Kullanıcı giriş yapmışsa e-posta adresi ve avatar göster -->
-        <div 
-          x-show="user" 
-          class="flex items-center space-x-2 bg-indigo-600 bg-opacity-50 text-white px-4 py-2 ml-4 rounded-lg"
-        >
-          <template x-if="user?.avatar">
-            <img :src="user.avatar" class="w-8 h-8 rounded-full border-2 border-white">
-          </template>
-          <template x-if="!user?.avatar">
-            <div class="w-8 h-8 rounded-full bg-indigo-800 flex items-center justify-center text-white font-bold">
-              <span x-text="user?.email?.charAt(0).toUpperCase()"></span>
-            </div>
-          </template>
-          <span x-text="user?.email"></span>
-        </div>
+        <template x-if="!user">
+          <button class="btn btn-primary" @click="login()">
+            <i class="bi-google me-2"></i>Giriş Yap
+          </button>
+        </template>
+        <template x-if="user">
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" 
+                    type="button" 
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+              <img :src="user.avatar || 'https://via.placeholder.com/32'" 
+                   class="rounded-circle me-2" 
+                   width="32" 
+                   height="32"
+                   alt="Profil resmi">
+              <span x-text="user.email"></span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" @click="logout()">Çıkış Yap</a></li>
+            </ul>
+          </div>
+        </template>
       </div>
     </div>
   </header>
-  
-  <!-- Main Content -->
-  <main class="flex-grow container mx-auto px-4 py-8">
-    <!-- Ana Sayfa -->
-    <div x-show="!inCall" class="h-full flex flex-col items-center justify-center">
-      <div class="text-center mb-8">
-        <h2 class="text-2xl md:text-3xl font-bold mb-2">Opia Görüntülü ve Sesli Sohbet</h2>
-        <p class="text-gray-600 dark:text-gray-400">Rastgele kişilerle görüntülü sohbet edin</p>
+
+  <main class="container flex-grow-1 py-4">
+    <div class="row g-4" x-show="!inCall">
+      <div class="col-12 text-center">
+        <h1 class="display-5 mb-3">Anonim Görüntülü Sohbet</h1>
+        <p class="lead text-muted">Rastgele eşleşmelerle yeni insanlarla tanışın</p>
       </div>
-      
-      <!-- Bekleme Animasyonu -->
-      <div x-show="waitingAnimation" class="mb-8">
-        <div class="flex items-center justify-center">
-          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-        </div>
-        <p class="mt-4 text-indigo-600 dark:text-indigo-400 font-medium">Eşleşme bekleniyor...</p>
-      </div>
-      
-      <!-- Giriş sonrası kullanıcı bilgisi gösterimi -->
-      <div x-show="user" class="flex items-center space-x-2 mb-4">
-        <template x-if="user?.avatar">
-          <img :src="user.avatar" class="w-8 h-8 rounded-full">
-        </template>
-        <span class="text-gray-700 dark:text-gray-300" x-text="user?.email || 'Misafir Kullanıcı'"></span>
-      </div>
-      
-      <!-- Kamera ve Mikrofon Kontrolleri -->
-      <div class="flex space-x-4 mb-6">
-        <button 
-          @click="toggleCameraPreview()" 
-          class="flex items-center justify-center px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-        >
-          <svg x-show="!localStream || isVideoOff" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          <svg x-show="localStream && !isVideoOff" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 12H6" />
-          </svg>
-          <span x-text="localStream && !isVideoOff ? 'Kamerayı Kapat' : 'Kamerayı Aç'"></span>
-        </button>
-        
-        <button 
-          @click="toggleMicPreview()" 
-          class="flex items-center justify-center px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-        >
-          <svg x-show="!localStream || isMuted" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-          <svg x-show="localStream && !isMuted" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-          </svg>
-          <span x-text="localStream && !isMuted ? 'Mikrofonu Kapat' : 'Mikrofonu Aç'"></span>
-        </button>
-      </div>
-      
-      <!-- Kamera Önizleme -->
-      <div x-show="localStream && !isVideoOff && !inCall" class="mb-6 relative w-64 h-48 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
-        <video 
-          id="previewVideo" 
-          class="w-full h-full object-cover video-mirror"
-          autoplay
-          playsinline
-          muted
-        ></video>
-      </div>
-      
-      <div class="space-y-4">
-        <button @click="toggleSearch()" 
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transform transition hover:scale-105"
-                x-text="searching ? 'Aramayı İptal Et' : 'Arama Başlat'">
+      <div class="col-12 d-flex justify-content-center">
+        <button class="btn btn-primary btn-lg px-5" 
+                @click="toggleSearch()"
+                :disabled="searching">
+          <i class="bi-search me-2"></i>
+          <span x-text="searching ? 'Aranıyor...' : 'Başlat'"></span>
         </button>
       </div>
     </div>
 
     <!-- Görüşme Ekranı -->
-    <div x-show="inCall" class="h-full flex flex-col">
-      <!-- Kontroller -->
-      <div class="flex justify-center space-x-4 mb-4">
-        <button 
-          @click="toggleMic()" 
-          class="btn-secondary p-3 rounded-full"
-        >
-          <svg x-show="!isMuted" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-          <svg x-show="isMuted" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-          </svg>
-        </button>
-        
-        <button @click="toggleVideo()" class="btn-secondary p-3 rounded-full">
-          <span x-show="!isVideoOff">Kamerayı Kapat</span>
-          <span x-show="isVideoOff">Kamerayı Aç</span>
-        </button>
-        
-        <button 
-          @click="endCallWithoutRequeue()" 
-          x-show="inCall"
-          class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600"
-        >
-          Görüşmeyi Sonlandır
-        </button>
-        
-        <button 
-          @click="endCall()" 
-          x-show="inCall"
-          class="bg-indigo-500 text-white p-3 rounded-full hover:bg-indigo-600"
-        >
-          Yeni Eşleşme Bul
-        </button>
-      </div>
-
-      <!-- Video ve Sohbet Grid -->
-      <div class="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-4 max-h-[calc(100vh-200px)]">
-        <!-- Yerel Video -->
-        <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden lg:col-span-1">
-          <video 
-            id="localVideo" 
-            class="w-full h-full object-cover video-mirror"
-            autoplay
-            playsinline
-            muted
-          ></video>
-          <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-center py-1">
-            Siz <span x-text="user?.name || 'Misafir'"></span>
+    <div class="row g-4" x-show="inCall">
+      <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-0">
+            <div class="video-container bg-dark">
+              <video id="remoteVideo" class="w-100 h-100" 
+                     x-show="remoteStream && !peerVideoOff" 
+                     autoplay playsinline></video>
+              <div class="position-absolute bottom-0 start-0 p-3">
+                <div class="bg-dark bg-opacity-75 rounded-pill px-3 py-1 text-white">
+                  <span x-text="currentPeerId ? 'Karşı Taraf' : 'Bağlantı Bekleniyor'"></span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        
-        <!-- Uzak Video -->
-        <div class="relative bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden lg:col-span-1">
-          <video 
-            id="remoteVideo" 
-            class="w-full h-full object-cover"
-            autoplay
-            playsinline
-          ></video>
-          <div 
-            x-show="!peerVideoOff" 
-            class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-center py-1"
-          >
-            Karşı Taraf
-          </div>
-          <div 
-            x-show="peerVideoOff || !inCall" 
-            class="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-75 text-white text-center"
-          >
-            <div>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-              </svg>
-              <p x-show="!inCall">Henüz bir görüşme başlatılmadı</p>
-              <p x-show="inCall && peerVideoOff">Karşı taraf kamerasını kapattı</p>
+      </div>
+      
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="video-container mb-3 bg-secondary bg-opacity-10">
+              <video id="localVideo" class="w-100 h-100" 
+                     x-show="localStream && !isVideoOff" 
+                     autoplay playsinline muted></video>
             </div>
-          </div>
-        
-        <!-- Chat Alanı -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg flex flex-col lg:col-span-1 h-[calc(100vh-200px)]">
-          <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="font-bold text-lg">Sohbet</h3>
-          </div>
-          
-          <!-- Mesaj Listesi -->
-          <div class="flex-1 overflow-y-auto p-4 space-y-4" id="messageList">
-            <template x-for="(message, index) in messages" :key="index">
-              <div :class="{
-                'flex flex-col': true,
-                'items-end': message.isMe,
-                'items-start': !message.isMe
-              }">
-                <div :class="{
-                  'max-w-xs rounded-lg p-3': true,
-                  'bg-indigo-500 text-white': message.isMe,
-                  'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white': !message.isMe
-                }">
-                  <p x-text="message.text"></p>
-                </div>
-                <span class="text-xs text-gray-500 mt-1" x-text="message.time"></span>
-              </div>
-            </template>
             
-            <!-- Boş durumda gösterilecek -->
-            <div x-show="messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              <p>Henüz mesaj yok</p>
+            <div class="flex-grow-1 d-flex flex-column">
+              <div class="flex-grow-1 overflow-auto mb-3" id="messageContainer">
+                <template x-for="(msg, index) in messages" :key="index">
+                  <div :class="['message-bubble', msg.isMe 
+                    ? 'ms-auto bg-primary text-white' 
+                    : 'me-auto bg-light']" 
+                    class="p-3 mb-2">
+                    <div x-text="msg.text"></div>
+                    <div class="text-end small opacity-75 mt-1" 
+                         x-text="msg.time"></div>
+                  </div>
+                </template>
+              </div>
+              
+              <div class="input-group">
+                <input type="text" 
+                       class="form-control" 
+                       x-model="messageText" 
+                       placeholder="Mesaj yaz..."
+                       @keyup.enter="sendMessage()"
+                       :disabled="!inCall">
+                <button class="btn btn-primary" 
+                        @click="sendMessage()"
+                        :disabled="!inCall">
+                  <i class="bi-send"></i>
+                </button>
+              </div>
             </div>
-          </div>
-          
-          <!-- Mesaj Gönderme Formu -->
-          <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-            <form @submit.prevent="sendMessage()" class="flex">
-              <input 
-                type="text" 
-                x-model="messageText" 
-                placeholder="Mesajınızı yazın..." 
-                class="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                :disabled="!inCall"
-              >
-              <button 
-                type="submit" 
-                class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-r-lg"
-                :disabled="!inCall"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                </svg>
-              </button>
-            </form>
           </div>
         </div>
       </div>
     </div>
   </main>
-  
-  <!-- Footer -->
-  <footer class="bg-gray-100 dark:bg-gray-800 py-4 text-center text-gray-600 dark:text-gray-400 text-sm">
-    <div class="container mx-auto">
-      <p>&copy; 2025 Opia. Tüm hakları saklıdır.</p>
-    </div>
-  </footer>
-  
-  <!-- Toast Notifications -->
-  <div class="fixed top-4 right-4 z-50 flex flex-col space-y-2">
-    <template x-for="toast in toasts" :key="toast.id">
-      <div 
-        :class="{
-          'bg-green-500': toast.type === 'success',
-          'bg-blue-500': toast.type === 'info',
-          'bg-yellow-500': toast.type === 'warning',
-          'bg-red-500': toast.type === 'error'
-        }"
-        class="text-white px-4 py-2 rounded shadow-lg transition-all duration-500 transform translate-x-0"
-      >
-        <span x-text="toast.message"></span>
-      </div>
-    </template>
-  </div>
 
-<script>
-function videoChatApp() {
-  return {
-    // State değişkenleri
-    darkMode: localStorage.getItem('darkMode') === 'true',
-    user: null,
-    inCall: false,
-    searching: false,
-    isMuted: false,
-    isVideoOff: false,
-    peerVideoOff: true,
-    messages: [],
-    messageText: '',
-    toasts: [],
-    isAdmin: false,
-    waitingAnimation: false,
-    localStream: null,
-    remoteStream: null,
-    peerConnection: null,
-    socket: null,
-    currentRoomId: null,
-    currentPeerId: null,
-    matchCheckInterval: null,
-    toastTimeout: null,
-    continuousSearch: false,
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Alpine.js ve diğer scriptler -->
+  <script>
+    function videoChatApp() {
+      return {
+        // State değişkenleri
+        darkMode: localStorage.getItem('darkMode') === 'true',
+        user: null,
+        inCall: false,
+        searching: false,
+        isMuted: false,
+        isVideoOff: false,
+        peerVideoOff: true,
+        messages: [],
+        messageText: '',
+        toasts: [],
+        isAdmin: false,
+        waitingAnimation: false,
+        localStream: null,
+        remoteStream: null,
+        peerConnection: null,
+        socket: null,
+        currentRoomId: null,
+        currentPeerId: null,
+        matchCheckInterval: null,
+        toastTimeout: null,
+        continuousSearch: false,
 
-    // Başlangıç fonksiyonu
-    initApp() {
-      this.loadUserData();
-      this.setupEventListeners();
-      this.checkSocketConnection();
-      this.setupSocketListeners();
-    },
+        // Başlangıç fonksiyonu
+        initApp() {
+          this.loadUserData();
+          this.setupEventListeners();
+          this.checkSocketConnection();
+          this.setupSocketListeners();
+        },
 
-    // Toast bildirim sistemi
-    showToast(message, type = 'info') {
-      const id = Date.now();
-      this.toasts.push({ id, message, type });
-      setTimeout(() => {
-        this.toasts = this.toasts.filter(toast => toast.id !== id);
-      }, 3000);
-    },
-
-    // Kullanıcı işlemleri
-    async login() {
-      try {
-        const supabaseClient = this.createSupabaseClient();
-        const { data, error } = await supabaseClient.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: window.location.origin }
-        });
-        if (error) throw error;
-      } catch (err) {
-        this.showToast('Giriş hatası: ' + err.message, 'error');
-      }
-    },
-
-    // Mesaj gönderme fonksiyonu
-    sendMessage() {
-      if (this.messageText.trim() === '') return;
-      
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      
-      // Yeni mesaj ekle
-      this.messages.push({
-        text: this.messageText,
-        time: timeStr,
-        isMe: true
-      });
-
-      // Mock cevap ekle
-      setTimeout(() => {
-        const responses = [
-          "Merhaba, nasılsın?",
-          "Anladım, devam et lütfen.",
-          "Bu çok ilginç!",
-          "Seninle konuşmak güzel.",
-          "Daha fazla bilgi verebilir misin?"
-        ];
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        
-        this.messages.push({
-          text: randomResponse,
-          time: `${now.getHours().toString().padStart(2, '0')}:${(now.getMinutes()+1).toString().padStart(2, '0')}`,
-          isMe: false
-        });
-        
-        this.scrollToBottom();
-      }, 1000);
-
-      this.messageText = '';
-      this.scrollToBottom();
-    },
-
-    // Eksik metodları ekliyoruz
-    createSupabaseClient() {
-      return supabase.createClient(
-        'https://unrfzoyltrqoyumrbhjo.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucmZ6b3lsdHJxb3l1bXJiaGpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA5NDg5NDEsImV4cCI6MjA1NjUyNDk0MX0.4p18-Ohwnerg-qUpKr4f4TQWVWKBJtSdTdmDaoTJLDE'
-      );
-    },
-
-    async loadUserData() {
-      try {
-        const supabaseClient = this.createSupabaseClient();
-        const { data: { user }, error } = await supabaseClient.auth.getUser();
-        
-        if (user) {
-          this.user = {
-            id: user.id,
-            email: user.email,
-            name: user.user_metadata?.full_name || 'Misafir',
-            avatar: user.user_metadata?.avatar_url
-          };
-        }
-      } catch (err) {
-        console.error('Kullanıcı yükleme hatası:', err);
-      }
-    },
-
-    setupEventListeners() {
-      window.addEventListener('beforeunload', () => this.cleanupBeforeUnload());
-    },
-
-    checkSocketConnection() {
-      if (!window.ioInstance) {
-        console.log('Socket.io bağlantısı yok, mock kullanılıyor');
-        this.socket = new window.MockSocket();
-      }
-    },
-
-    cleanupBeforeUnload() {
-      if (this.peerConnection) this.peerConnection.close();
-      if (this.localStream) this.localStream.getTracks().forEach(track => track.stop());
-    },
-
-    // Arama başlat/durdur metodu
-    async toggleSearch() {
-      if (this.searching) {
-        await this.cancelSearch();
-      } else {
-        await this.startSearch();
-      }
-    },
-
-    // Aramayı başlat
-    async startSearch() {
-      try {
-        if (!this.user) {
-          this.showToast('Arama için giriş yapmalısınız', 'warning');
-          return;
-        }
-
-        this.searching = true;
-        this.waitingAnimation = true;
-        
-        // Mock eşleşme tetikleme
-        if (this.socket && this.socket.mockTrigger) {
+        // Toast bildirim sistemi
+        showToast(message, type = 'info') {
+          const id = Date.now();
+          this.toasts.push({ id, message, type });
           setTimeout(() => {
-            this.socket.mockTrigger('match-found', {
-              roomId: 'mock_room_' + Date.now(),
-              peerId: 'mock_peer_123',
-              iceServers: [
+            this.toasts = this.toasts.filter(toast => toast.id !== id);
+          }, 3000);
+        },
+
+        // Kullanıcı işlemleri
+        async login() {
+          try {
+            // Mock kullanıcı girişi
+            this.user = {
+              id: 'mock_user_' + Date.now(),
+              email: 'mock@user.com',
+              name: 'Mock Kullanıcı',
+              avatar: 'https://i.pravatar.cc/150?u=mock_user'
+            };
+            
+            this.showToast('Demo giriş başarılı!', 'success');
+            await this.loadUserData();
+            
+          } catch (err) {
+            console.error('Giriş hatası:', err);
+            this.showToast('Demo girişi sırasında hata oluştu', 'error');
+          }
+        },
+
+        // Görüşme kontrol fonksiyonları
+        async endCall() {
+          this.cleanupConnections();
+          this.resetUIState();
+          this.showToast('Görüşme sonlandırıldı', 'info');
+          this.toggleSearch(); // Otomatik yeni arama başlat
+        },
+
+        async endCallWithoutRequeue() {
+          this.cleanupConnections();
+          this.resetUIState();
+          this.showToast('Görüşme sonlandırıldı', 'info');
+        },
+
+        // Video elementlerini güncelle
+        setupVideoElements() {
+          this.$nextTick(() => {
+            const localVideo = document.getElementById('localVideo');
+            const remoteVideo = document.getElementById('remoteVideo');
+            
+            if (localVideo && this.localStream) {
+              localVideo.srcObject = this.localStream;
+              localVideo.play().catch(console.error);
+            }
+            
+            if (remoteVideo && this.remoteStream) {
+              remoteVideo.srcObject = this.remoteStream;
+              remoteVideo.play().catch(console.error);
+            }
+          });
+        },
+
+        // Mesajlaşma sistemi
+        sendMessage() {
+          if (!this.messageText.trim() || !this.inCall) return;
+          
+          const newMessage = {
+            text: this.messageText,
+            time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+            isMe: true
+          };
+          
+          this.messages.push(newMessage);
+          this.messageText = '';
+          this.scrollToBottom();
+          
+          // Mock cevap ekle
+          setTimeout(() => {
+            const responses = [
+              "Bu çok ilginç!",
+              "Devam et lütfen...",
+              "Anladım",
+              "Biraz daha açıklar mısın?",
+              "Teşekkür ederim!"
+            ];
+            const response = responses[Math.floor(Math.random() * responses.length)];
+            
+            this.messages.push({
+              text: response,
+              time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+              isMe: false
+            });
+            this.scrollToBottom();
+          }, 1000);
+        },
+
+        scrollToBottom() {
+          this.$nextTick(() => {
+            const container = document.getElementById('messageContainer');
+            if (container) {
+              container.scrollTop = container.scrollHeight;
+            }
+          });
+        },
+
+        // Eksik metodları ekliyoruz
+        createSupabaseClient() {
+          return supabase.createClient(
+            'https://unrfzoyltrqoyumrbhjo.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucmZ6b3lsdHJxb3l1bXJiaGpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA5NDg5NDEsImV4cCI6MjA1NjUyNDk0MX0.4p18-Ohwnerg-qUpKr4f4TQWVWKBJtSdTdmDaoTJLDE'
+          );
+        },
+
+        async loadUserData() {
+          try {
+            const supabaseClient = this.createSupabaseClient();
+            const { data: { user }, error } = await supabaseClient.auth.getUser();
+            
+            if (user) {
+              this.user = {
+                id: user.id,
+                email: user.email,
+                name: user.user_metadata?.full_name || 'Misafir',
+                avatar: user.user_metadata?.avatar_url
+              };
+            }
+          } catch (err) {
+            console.error('Kullanıcı yükleme hatası:', err);
+          }
+        },
+
+        setupEventListeners() {
+          window.addEventListener('beforeunload', () => this.cleanupBeforeUnload());
+        },
+
+        checkSocketConnection() {
+          if (!window.ioInstance) {
+            console.log('Socket.io bağlantısı yok, mock kullanılıyor');
+            this.socket = new window.MockSocket();
+          }
+        },
+
+        cleanupBeforeUnload() {
+          if (this.peerConnection) this.peerConnection.close();
+          if (this.localStream) this.localStream.getTracks().forEach(track => track.stop());
+        },
+
+        // Arama başlat/durdur metodu
+        async toggleSearch() {
+          if (this.searching) {
+            await this.cancelSearch();
+          } else {
+            await this.startSearch();
+          }
+        },
+
+        // Aramayı başlat
+        async startSearch() {
+          try {
+            // Gerçek medya izinlerini kontrol et
+            const hasMediaAccess = await this.checkMediaPermissions();
+            
+            // Mock eşleşme süresini rastgele yap
+            const mockDelay = Math.floor(Math.random() * 4000) + 1000;
+            
+            setTimeout(() => {
+              this.handleMatchFound({
+                roomId: 'mock_room_' + Date.now(),
+                peerId: 'mock_peer_' + Math.random().toString(36).substr(2, 9),
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+              });
+            }, mockDelay);
+
+          } catch (err) {
+            console.error('Arama başlatma hatası:', err);
+            this.showToast('Demo arama başlatılamadı', 'error');
+          }
+        },
+
+        // Aramayı iptal et
+        async cancelSearch() {
+          this.searching = false;
+          this.waitingAnimation = false;
+          this.showToast('Arama iptal edildi', 'info');
+          
+          // Mock temizlik
+          if (this.socket && this.socket.mockTrigger) {
+            this.socket.mockTrigger('search-cancelled');
+          }
+        },
+
+        // Eşleşme bulunduğunda çağrılır
+        handleMatchFound(data) {
+          this.inCall = true;
+          this.currentRoomId = data.roomId;
+          this.currentPeerId = data.peerId;
+          this.setupWebRTC(data.iceServers);
+        },
+
+        // WebRTC kurulumu
+        async setupWebRTC(iceServers) {
+          try {
+            this.peerConnection = new RTCPeerConnection({
+              iceServers: iceServers || [
                 { urls: 'stun:stun.l.google.com:19302' }
               ]
             });
-          }, 3000);
-        }
 
-        this.showToast('Eşleşme aranıyor...', 'info');
-      } catch (err) {
-        console.error('Arama başlatma hatası:', err);
-        this.searching = false;
-        this.waitingAnimation = false;
-      }
-    },
+            // Mock medya akışı
+            this.localStream = await this.getMockMediaStream();
+            this.localStream.getTracks().forEach(track => {
+              this.peerConnection.addTrack(track, this.localStream);
+            });
 
-    // Aramayı iptal et
-    async cancelSearch() {
-      this.searching = false;
-      this.waitingAnimation = false;
-      this.showToast('Arama iptal edildi', 'info');
-      
-      // Mock temizlik
-      if (this.socket && this.socket.mockTrigger) {
-        this.socket.mockTrigger('search-cancelled');
-      }
-    },
+            // Mock uzak akış
+            this.peerConnection.ontrack = (event) => {
+              this.remoteStream = event.streams[0];
+              this.peerVideoOff = false;
+            };
 
-    // Eşleşme bulunduğunda çağrılır
-    handleMatchFound(data) {
-      this.inCall = true;
-      this.currentRoomId = data.roomId;
-      this.currentPeerId = data.peerId;
-      this.setupWebRTC(data.iceServers);
-    },
+            // Bağlantı durum takibi
+            this.peerConnection.oniceconnectionstatechange = () => {
+              if (this.peerConnection.iceConnectionState === 'connected') {
+                this.showToast('Bağlantı başarıyla kuruldu', 'success');
+              }
+            };
 
-    // WebRTC kurulumu
-    async setupWebRTC(iceServers) {
-      try {
-        this.peerConnection = new RTCPeerConnection({
-          iceServers: iceServers || [
-            { urls: 'stun:stun.l.google.com:19302' }
-          ]
-        });
+            // Mock sinyal alışverişi
+            const offer = await this.peerConnection.createOffer();
+            await this.peerConnection.setLocalDescription(offer);
 
-        // Mock medya akışı
-        this.localStream = await this.getMockMediaStream();
-        this.localStream.getTracks().forEach(track => {
-          this.peerConnection.addTrack(track, this.localStream);
-        });
-
-        // Mock uzak akış
-        this.peerConnection.ontrack = (event) => {
-          this.remoteStream = event.streams[0];
-          this.peerVideoOff = false;
-        };
-
-        // Bağlantı durum takibi
-        this.peerConnection.oniceconnectionstatechange = () => {
-          if (this.peerConnection.iceConnectionState === 'connected') {
-            this.showToast('Bağlantı başarıyla kuruldu', 'success');
+          } catch (err) {
+            console.error('WebRTC kurulum hatası:', err);
+            this.showToast('Medya erişimi için izin gereklidir', 'error');
           }
-        };
+        },
 
-        // Mock sinyal alışverişi
-        const offer = await this.peerConnection.createOffer();
-        await this.peerConnection.setLocalDescription(offer);
+        // Mock medya akışı oluştur
+        async getMockMediaStream() {
+          try {
+            // Gerçek medya akışı dene
+            return await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true
+            });
+          } catch (error) {
+            // Mock video element oluştur
+            const mockVideo = document.createElement('video');
+            mockVideo.src = 'https://samplelib.com/lib/preview/mp4/sample-5s.mp4';
+            mockVideo.loop = true;
+            await mockVideo.play();
+            
+            const videoTrack = mockVideo.captureStream().getVideoTracks()[0];
+            const audioContext = new AudioContext();
+            const oscillator = audioContext.createOscillator();
+            const audioDestination = audioContext.createMediaStreamDestination();
+            oscillator.connect(audioDestination);
+            oscillator.start();
+            
+            return new MediaStream([videoTrack, ...audioDestination.stream.getAudioTracks()]);
+          }
+        },
 
-      } catch (err) {
-        console.error('WebRTC kurulum hatası:', err);
-        this.showToast('Medya erişimi için izin gereklidir', 'error');
+        // Socket dinleyicilerini kur
+        setupSocketListeners() {
+          if (this.socket) {
+            this.socket.on('match-found', (data) => this.handleMatchFound(data));
+            this.socket.on('disconnect', () => this.handleDisconnect());
+          }
+        },
+
+        // Bağlantı kesildiğinde
+        handleDisconnect() {
+          this.showToast('Demo bağlantı sonlandı', 'info');
+          this.cleanupConnections();
+          this.resetUIState();
+        },
+
+        // Temizlik fonksiyonunu güncelle
+        cleanupConnections() {
+          if (this.peerConnection) {
+            this.peerConnection.close();
+            this.peerConnection = null;
+          }
+          this.inCall = false;
+          this.searching = false;
+          this.peerVideoOff = true;
+        },
+
+        resetUIState() {
+          this.inCall = false;
+          this.searching = false;
+          this.peerVideoOff = true;
+          this.messages = [];
+        },
+
+        async checkMediaPermissions() {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: true, 
+              audio: true 
+            });
+            stream.getTracks().forEach(track => track.stop());
+            return true;
+          } catch (error) {
+            this.showToast('Kamera/mikrofon erişimi gereklidir', 'warning');
+            return false;
+          }
+        }
       }
-    },
-
-    // Mock medya akışı oluştur
-    async getMockMediaStream() {
-      try {
-        return await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
-      } catch (error) {
-        console.log('Mock medya akışı oluşturuluyor...');
-        return new MediaStream([
-          new MediaStreamTrack({ kind: 'video' }),
-          new MediaStreamTrack({ kind: 'audio' })
-        ]);
-      }
-    },
-
-    // Socket dinleyicilerini kur
-    setupSocketListeners() {
-      if (this.socket) {
-        this.socket.on('match-found', (data) => this.handleMatchFound(data));
-        this.socket.on('disconnect', () => this.handleDisconnect());
-      }
-    },
-
-    // Bağlantı kesildiğinde
-    handleDisconnect() {
-      this.showToast('Bağlantı kesildi', 'error');
-      this.cleanupConnections();
-    },
-
-    // Temizlik fonksiyonunu güncelle
-    cleanupConnections() {
-      if (this.peerConnection) {
-        this.peerConnection.close();
-        this.peerConnection = null;
-      }
-      this.inCall = false;
-      this.searching = false;
-      this.peerVideoOff = true;
     }
-  }
-}
-</script>
+  </script>
 </body>
 </html>
